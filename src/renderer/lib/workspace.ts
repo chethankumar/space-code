@@ -68,7 +68,16 @@ export function createCodeTab(): CodeTab {
   return {
     id: `code-tab-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: "Code",
-    description: "Clean slate"
+    description: "Codex session",
+    status: "idle",
+    availableModels: [],
+    selectedModel: undefined,
+    reasoningEffort: "medium",
+    runtimeMode: "full-access",
+    interactionMode: "default",
+    draft: "",
+    attachments: [],
+    messages: []
   };
 }
 

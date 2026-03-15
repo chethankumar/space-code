@@ -5,6 +5,10 @@ import type {
   AppStateSnapshot,
   BrowserSurfaceBounds,
   BrowserViewState,
+  CodeBootstrap,
+  CodeSessionEvent,
+  CodeSessionStartInput,
+  CodeTurnInput,
   FileNode,
   GitBranchInfo,
   GitCompareDetails,
@@ -103,6 +107,33 @@ contextBridge.exposeInMainWorld("naeditor", {
       listener(payload);
     ipcRenderer.on("terminal:exit", wrapped);
     return () => ipcRenderer.removeListener("terminal:exit", wrapped);
+  },
+  getCodeBootstrap: (project: ProjectRecord, cwd: string) =>
+    ipcRenderer.invoke("code:get-bootstrap", { project, cwd }) as Promise<CodeBootstrap>,
+  startCodeSession: (input: CodeSessionStartInput) =>
+    ipcRenderer.invoke("code:start-session", input) as Promise<void>,
+  sendCodeTurn: (input: CodeTurnInput) =>
+    ipcRenderer.invoke("code:send-turn", input) as Promise<void>,
+  interruptCodeTurn: (sessionId: string, turnId?: string) =>
+    ipcRenderer.invoke("code:interrupt-turn", { sessionId, turnId }) as Promise<void>,
+  respondToCodeRequest: (
+    sessionId: string,
+    requestId: string,
+    decision: "approved" | "denied",
+    answers?: Record<string, string | string[]>
+  ) =>
+    ipcRenderer.invoke("code:respond-to-request", {
+      sessionId,
+      requestId,
+      decision,
+      answers
+    }) as Promise<void>,
+  stopCodeSession: (sessionId: string) =>
+    ipcRenderer.invoke("code:stop-session", sessionId) as Promise<void>,
+  onCodeEvent: (listener: (event: CodeSessionEvent) => void) => {
+    const wrapped = (_event: IpcRendererEvent, payload: CodeSessionEvent) => listener(payload);
+    ipcRenderer.on("code:event", wrapped);
+    return () => ipcRenderer.removeListener("code:event", wrapped);
   },
   syncBrowserView: (payload: {
     projectId: string;

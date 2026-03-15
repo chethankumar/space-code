@@ -61,10 +61,241 @@ export type TerminalThemePreset =
   | "solarized-light"
   | "gruvbox-dark";
 
+export type CodeRuntimeMode = "full-access" | "approval-required";
+export type CodeInteractionMode = "default" | "plan";
+export type CodeReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export type CodeSessionStatus =
+  | "idle"
+  | "connecting"
+  | "ready"
+  | "running"
+  | "waiting"
+  | "error"
+  | "closed";
+
+export type CodeAccountInfo = {
+  type: "apiKey" | "chatgpt" | "unknown";
+  email?: string;
+  planType?: string | null;
+  requiresOpenaiAuth?: boolean;
+};
+
+export type CodeModelOption = {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  supportedReasoningEfforts: CodeReasoningEffort[];
+  defaultReasoningEffort: CodeReasoningEffort;
+  inputModalities: Array<"text" | "image">;
+  supportsPersonality: boolean;
+  isDefault: boolean;
+  upgrade?: string | null;
+};
+
+export type CodeAttachment = {
+  id: string;
+  type: "image";
+  path: string;
+  name: string;
+  mimeType?: string;
+  dataUrl?: string;
+};
+
+export type CodeTokenUsage = {
+  totalTokens: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  modelContextWindow?: number;
+};
+
+export type CodeUserInputQuestion = {
+  id: string;
+  header: string;
+  question: string;
+  options: Array<{
+    label: string;
+    description: string;
+  }>;
+};
+
+export type CodePendingRequest = {
+  requestId: string;
+  kind: "command" | "file-read" | "file-change" | "user-input";
+  title: string;
+  detail?: string;
+  command?: string;
+  questions?: CodeUserInputQuestion[];
+};
+
+export type CodeMessage = {
+  id: string;
+  kind: "user" | "assistant" | "reasoning" | "tool" | "system" | "status";
+  title?: string;
+  text: string;
+  streaming?: boolean;
+  createdAt?: string;
+  completedAt?: string;
+  elapsedMs?: number;
+  changedFiles?: Array<{
+    path: string;
+    status: "added" | "modified" | "deleted" | "renamed" | "copied" | "untracked" | "unknown";
+  }>;
+  metadata?: Record<string, string>;
+};
+
+export type CodeBootstrap = {
+  account: CodeAccountInfo;
+  models: CodeModelOption[];
+};
+
+export type CodeSessionStartInput = {
+  sessionId: string;
+  project: ProjectRecord;
+  cwd: string;
+  model?: string;
+  reasoningEffort: CodeReasoningEffort;
+  runtimeMode: CodeRuntimeMode;
+  interactionMode: CodeInteractionMode;
+  resumeThreadId?: string;
+};
+
+export type CodeTurnInput = {
+  sessionId: string;
+  input?: string;
+  attachments?: CodeAttachment[];
+  model?: string;
+  reasoningEffort?: CodeReasoningEffort;
+  interactionMode?: CodeInteractionMode;
+};
+
+export type CodeSessionStartedEvent = {
+  type: "session.started";
+  sessionId: string;
+  threadId: string;
+  title?: string;
+  cwd: string;
+  sessionPath?: string;
+  account: CodeAccountInfo;
+  models: CodeModelOption[];
+  status: CodeSessionStatus;
+};
+
+export type CodeSessionStateEvent = {
+  type: "session.state";
+  sessionId: string;
+  status: CodeSessionStatus;
+  message?: string;
+  threadId?: string;
+};
+
+export type CodeTurnStartedEvent = {
+  type: "turn.started";
+  sessionId: string;
+  turnId: string;
+};
+
+export type CodeTurnCompletedEvent = {
+  type: "turn.completed";
+  sessionId: string;
+  turnId: string;
+  status: "completed" | "failed" | "cancelled" | "interrupted";
+  error?: string;
+  completedAt: string;
+  elapsedMs?: number;
+  changedFiles?: Array<{
+    path: string;
+    status: "added" | "modified" | "deleted" | "renamed" | "copied" | "untracked" | "unknown";
+  }>;
+};
+
+export type CodeThreadCompactedEvent = {
+  type: "thread.compacted";
+  sessionId: string;
+  at: string;
+  summary?: string;
+};
+
+export type CodeMessageStartedEvent = {
+  type: "message.started";
+  sessionId: string;
+  message: CodeMessage;
+};
+
+export type CodeMessageDeltaEvent = {
+  type: "message.delta";
+  sessionId: string;
+  messageId: string;
+  delta: string;
+};
+
+export type CodeMessageCompletedEvent = {
+  type: "message.completed";
+  sessionId: string;
+  messageId: string;
+  text?: string;
+};
+
+export type CodePendingRequestOpenedEvent = {
+  type: "request.opened";
+  sessionId: string;
+  request: CodePendingRequest;
+};
+
+export type CodePendingRequestResolvedEvent = {
+  type: "request.resolved";
+  sessionId: string;
+  requestId: string;
+};
+
+export type CodeTokenUsageEvent = {
+  type: "token-usage.updated";
+  sessionId: string;
+  usage: CodeTokenUsage;
+};
+
+export type CodeErrorEvent = {
+  type: "error";
+  sessionId: string;
+  message: string;
+};
+
+export type CodeSessionEvent =
+  | CodeSessionStartedEvent
+  | CodeSessionStateEvent
+  | CodeTurnStartedEvent
+  | CodeTurnCompletedEvent
+  | CodeThreadCompactedEvent
+  | CodeMessageStartedEvent
+  | CodeMessageDeltaEvent
+  | CodeMessageCompletedEvent
+  | CodePendingRequestOpenedEvent
+  | CodePendingRequestResolvedEvent
+  | CodeTokenUsageEvent
+  | CodeErrorEvent;
+
 export type CodeTab = {
   id: string;
   title: string;
   description?: string;
+  status: CodeSessionStatus;
+  threadId?: string;
+  cwd?: string;
+  sessionPath?: string;
+  account?: CodeAccountInfo;
+  availableModels: CodeModelOption[];
+  selectedModel?: string;
+  reasoningEffort: CodeReasoningEffort;
+  runtimeMode: CodeRuntimeMode;
+  interactionMode: CodeInteractionMode;
+  draft: string;
+  attachments: CodeAttachment[];
+  messages: CodeMessage[];
+  pendingRequest?: CodePendingRequest;
+  tokenUsage?: CodeTokenUsage;
+  lastError?: string;
 };
 
 export type ProjectRecord = {
@@ -458,6 +689,18 @@ export type NaEditorApi = {
   closeTerminal: (sessionId: string) => Promise<void>;
   onTerminalData: (listener: (payload: { sessionId: string; data: string }) => void) => () => void;
   onTerminalExit: (listener: (payload: { sessionId: string; exitCode: number }) => void) => () => void;
+  getCodeBootstrap: (project: ProjectRecord, cwd: string) => Promise<CodeBootstrap>;
+  startCodeSession: (input: CodeSessionStartInput) => Promise<void>;
+  sendCodeTurn: (input: CodeTurnInput) => Promise<void>;
+  interruptCodeTurn: (sessionId: string, turnId?: string) => Promise<void>;
+  respondToCodeRequest: (
+    sessionId: string,
+    requestId: string,
+    decision: "approved" | "denied",
+    answers?: Record<string, string | string[]>
+  ) => Promise<void>;
+  stopCodeSession: (sessionId: string) => Promise<void>;
+  onCodeEvent: (listener: (event: CodeSessionEvent) => void) => () => void;
   syncBrowserView: (payload: {
     projectId: string;
     url: string;

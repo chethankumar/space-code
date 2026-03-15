@@ -19,6 +19,21 @@ type WorkspaceTrackProps = {
   onAddCodeTab: () => void;
   onSelectCodeTab: (tabId: string) => void;
   onCloseCodeTab: (tabId: string) => void;
+  onEnsureCodeBootstrap: (tabId: string) => Promise<void>;
+  onUpdateCodeDraft: (tabId: string, draft: string) => void;
+  onSetCodeModel: (tabId: string, model?: string) => void;
+  onSetCodeReasoningEffort: (tabId: string, effort: ProjectWorkspace["codeTabs"][number]["reasoningEffort"]) => void;
+  onSetCodeRuntimeMode: (tabId: string, mode: ProjectWorkspace["codeTabs"][number]["runtimeMode"]) => void;
+  onSetCodeInteractionMode: (tabId: string, mode: ProjectWorkspace["codeTabs"][number]["interactionMode"]) => void;
+  onAddCodeAttachment: (tabId: string, attachment: ProjectWorkspace["codeTabs"][number]["attachments"][number]) => void;
+  onRemoveCodeAttachment: (tabId: string, attachmentId: string) => void;
+  onSubmitCodeTurn: (tabId: string) => Promise<void>;
+  onInterruptCodeTurn: (tabId: string) => Promise<void>;
+  onRespondToCodeRequest: (
+    tabId: string,
+    decision: "approved" | "denied",
+    answers?: Record<string, string | string[]>
+  ) => Promise<void>;
   onBrowserUrlChange: (url: string) => void;
   onAddBrowserTab: () => void;
   onCloseBrowserTab: (tabId: string) => void;
@@ -46,6 +61,17 @@ export function WorkspaceTrack({
   onAddCodeTab,
   onSelectCodeTab,
   onCloseCodeTab,
+  onEnsureCodeBootstrap,
+  onUpdateCodeDraft,
+  onSetCodeModel,
+  onSetCodeReasoningEffort,
+  onSetCodeRuntimeMode,
+  onSetCodeInteractionMode,
+  onAddCodeAttachment,
+  onRemoveCodeAttachment,
+  onSubmitCodeTurn,
+  onInterruptCodeTurn,
+  onRespondToCodeRequest,
   onBrowserUrlChange,
   onAddBrowserTab,
   onCloseBrowserTab,
@@ -75,6 +101,11 @@ export function WorkspaceTrack({
 
   const total = getTrackWidth(workspace.track);
   const surfaceOrder = normalizeSurfaceOrder(workspace.track.order);
+  const selectedGitRepo = workspace.gitRepositories?.find((repo) => repo.rootPath === workspace.selectedGitRepoPath);
+  const worktreeLabel =
+    selectedGitRepo?.relativePath && selectedGitRepo.relativePath !== "."
+      ? selectedGitRepo.relativePath
+      : workspace.git?.repoDisplayPath || project.name;
   const columnSizes = surfaceOrder.map(
     (surface) => `${(snapWidthToRatio[workspace.track.widths[surface]] / total) * 100}%`
   );
@@ -124,9 +155,29 @@ export function WorkspaceTrack({
                   project={project}
                   tabs={workspace.codeTabs}
                   activeTabId={workspace.activeCodeTabId}
+                  branchName={workspace.git?.branch}
+                  worktreeLabel={worktreeLabel}
+                  mentionBasePath={workspace.selectedGitRepoPath ?? project.rootPath}
+                  onOpenBranches={() => {
+                    if (!workspace.track.inspector.visible) {
+                      onToggleInspector();
+                    }
+                    onEditorModeChange("branches");
+                  }}
                   onSelectTab={onSelectCodeTab}
                   onAddTab={onAddCodeTab}
                   onCloseTab={onCloseCodeTab}
+                  onEnsureBootstrap={onEnsureCodeBootstrap}
+                  onUpdateDraft={onUpdateCodeDraft}
+                  onSetModel={onSetCodeModel}
+                  onSetReasoningEffort={onSetCodeReasoningEffort}
+                  onSetRuntimeMode={onSetCodeRuntimeMode}
+                  onSetInteractionMode={onSetCodeInteractionMode}
+                  onAddAttachment={onAddCodeAttachment}
+                  onRemoveAttachment={onRemoveCodeAttachment}
+                  onSubmitTurn={onSubmitCodeTurn}
+                  onInterruptTurn={onInterruptCodeTurn}
+                  onRespondToRequest={onRespondToCodeRequest}
                 />
               );
             }

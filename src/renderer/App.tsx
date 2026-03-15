@@ -64,6 +64,18 @@ export function App() {
   const selectCodeTab = useAppStore((state) => state.selectCodeTab);
   const closeCodeTab = useAppStore((state) => state.closeCodeTab);
   const closeActiveCodeTab = useAppStore((state) => state.closeActiveCodeTab);
+  const ensureCodeBootstrap = useAppStore((state) => state.ensureCodeBootstrap);
+  const updateCodeDraft = useAppStore((state) => state.updateCodeDraft);
+  const setCodeModel = useAppStore((state) => state.setCodeModel);
+  const setCodeReasoningEffort = useAppStore((state) => state.setCodeReasoningEffort);
+  const setCodeRuntimeMode = useAppStore((state) => state.setCodeRuntimeMode);
+  const setCodeInteractionMode = useAppStore((state) => state.setCodeInteractionMode);
+  const addCodeAttachment = useAppStore((state) => state.addCodeAttachment);
+  const removeCodeAttachment = useAppStore((state) => state.removeCodeAttachment);
+  const submitCodeTurn = useAppStore((state) => state.submitCodeTurn);
+  const interruptCodeTurn = useAppStore((state) => state.interruptCodeTurn);
+  const respondToCodeRequest = useAppStore((state) => state.respondToCodeRequest);
+  const handleCodeEvent = useAppStore((state) => state.handleCodeEvent);
   const setBrowserUrl = useAppStore((state) => state.setBrowserUrl);
   const addBrowserTab = useAppStore((state) => state.addBrowserTab);
   const addTerminalTab = useAppStore((state) => state.addTerminalTab);
@@ -132,6 +144,8 @@ export function App() {
       void refreshGit(activeProject.id);
     }
   }, [activeProject?.id, activeProject?.rootPath, refreshGit]);
+
+  useEffect(() => window.naeditor.onCodeEvent(handleCodeEvent), [handleCodeEvent]);
 
   useEffect(() => {
     const handleCommand = (command: AppCommand) => {
@@ -401,6 +415,17 @@ export function App() {
             onAddCodeTab={addCodeTab}
             onSelectCodeTab={selectCodeTab}
             onCloseCodeTab={closeCodeTab}
+            onEnsureCodeBootstrap={ensureCodeBootstrap}
+            onUpdateCodeDraft={updateCodeDraft}
+            onSetCodeModel={setCodeModel}
+            onSetCodeReasoningEffort={setCodeReasoningEffort}
+            onSetCodeRuntimeMode={setCodeRuntimeMode}
+            onSetCodeInteractionMode={setCodeInteractionMode}
+            onAddCodeAttachment={addCodeAttachment}
+            onRemoveCodeAttachment={removeCodeAttachment}
+            onSubmitCodeTurn={submitCodeTurn}
+            onInterruptCodeTurn={interruptCodeTurn}
+            onRespondToCodeRequest={respondToCodeRequest}
             onBrowserUrlChange={setBrowserUrl}
             onAddBrowserTab={addBrowserTab}
             onCloseBrowserTab={closeBrowserTab}

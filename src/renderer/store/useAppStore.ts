@@ -3,6 +3,12 @@ import type {
   AppSettings,
   AppStateSnapshot,
   BrowserTab,
+  CodeAttachment,
+  CodeBootstrap,
+  CodeReasoningEffort,
+  CodeRuntimeMode,
+  CodeInteractionMode,
+  CodeSessionEvent,
   CodeTab,
   EditorTab,
   FileNode,
@@ -101,6 +107,22 @@ type AppStore = {
   selectCodeTab: (tabId: string) => void;
   closeCodeTab: (tabId: string) => void;
   closeActiveCodeTab: () => void;
+  ensureCodeBootstrap: (tabId: string) => Promise<void>;
+  updateCodeDraft: (tabId: string, draft: string) => void;
+  setCodeModel: (tabId: string, model?: string) => void;
+  setCodeReasoningEffort: (tabId: string, effort: CodeReasoningEffort) => void;
+  setCodeRuntimeMode: (tabId: string, mode: CodeRuntimeMode) => void;
+  setCodeInteractionMode: (tabId: string, mode: CodeInteractionMode) => void;
+  addCodeAttachment: (tabId: string, attachment: CodeAttachment) => void;
+  removeCodeAttachment: (tabId: string, attachmentId: string) => void;
+  submitCodeTurn: (tabId: string) => Promise<void>;
+  interruptCodeTurn: (tabId: string) => Promise<void>;
+  respondToCodeRequest: (
+    tabId: string,
+    decision: "approved" | "denied",
+    answers?: Record<string, string | string[]>
+  ) => Promise<void>;
+  handleCodeEvent: (event: CodeSessionEvent) => void;
   setBrowserUrl: (url: string) => void;
   addTerminalTab: () => void;
   selectTerminalTab: (tabId: string) => void;
@@ -204,6 +226,28 @@ function getSelectedGitRepoRoot(workspace: ProjectWorkspace | undefined, project
   return workspace?.selectedGitRepoPath || project.rootPath;
 }
 
+function getCodeContext(state: AppStore, tabId: string) {
+  const project = state.activeProject();
+  const workspace = state.activeWorkspace();
+  const tab = workspace?.codeTabs.find((entry) => entry.id === tabId);
+  if (!project || !workspace || !tab) {
+    return null;
+  }
+
+  return { project, workspace, tab };
+}
+
+function updateCodeTab(
+  workspace: ProjectWorkspace,
+  tabId: string,
+  updater: (tab: CodeTab) => CodeTab
+): ProjectWorkspace {
+  return {
+    ...workspace,
+    codeTabs: workspace.codeTabs.map((tab) => (tab.id === tabId ? updater(tab) : tab))
+  };
+}
+
 async function syncWorkspaceGitDiffTabs(
   project: ProjectRecord,
   workspace: ProjectWorkspace,
@@ -287,9 +331,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
           const codeTabs =
             workspace.codeTabs && workspace.codeTabs.length > 0
               ? workspace.codeTabs.map((tab) => ({
+                  ...createCodeTab(),
+                  ...tab,
                   id: tab.id,
                   title: tab.title ?? "Code",
-                  description: tab.description
+                  availableModels: tab.availableModels ?? [],
+                  draft: tab.draft ?? "",
+                  attachments: tab.attachments ?? [],
+                  messages: tab.messages ?? [],
+                  reasoningEffort: tab.reasoningEffort ?? "medium",
+                  runtimeMode: tab.runtimeMode ?? "full-access",
+                  interactionMode: tab.interactionMode ?? "default",
+                  status: tab.status ?? "idle"
                 }))
               : [createCodeTab()];
           const openTabs = (workspace.openTabs ?? []).map((tab) =>
@@ -1172,6 +1225,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
     void get().persist();
   },
   closeCodeTab: (tabId) => {
+    const workspace = get().activeWorkspace();
+    const closingTab = workspace?.codeTabs.find((tab) => tab.id === tabId);
+    if (closingTab) {
+      const confirmed = window.confirm(
+        closingTab.threadId
+          ? "Close this thread? This will end the active Codex session for this tab."
+          : "Close this thread tab?"
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    if (closingTab?.threadId) {
+      void window.naeditor.stopCodeSession(tabId);
+    }
     set((state) =>
       withWorkspace(state, (workspace) => {
         if (workspace.codeTabs.length <= 1) {
@@ -1207,6 +1275,379 @@ export const useAppStore = create<AppStore>((set, get) => ({
       return;
     }
     get().closeCodeTab(tabId);
+  },
+  ensureCodeBootstrap: async (tabId) => {
+    const context = getCodeContext(get(), tabId);
+    if (!context) {
+      return;
+    }
+
+    if (context.tab.availableModels.length > 0 || context.tab.status === "connecting") {
+      return;
+    }
+
+    const cwd = getSelectedGitRepoRoot(context.workspace, context.project);
+    if (!cwd) {
+      return;
+    }
+
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          status: tab.threadId ? tab.status : "connecting",
+          lastError: undefined
+        }))
+      )
+    );
+
+    try {
+      const bootstrap = await window.naeditor.getCodeBootstrap(context.project, cwd);
+      set((state) =>
+        withWorkspace(state, (workspace) =>
+          updateCodeTab(workspace, tabId, (tab) => ({
+            ...tab,
+            status: tab.threadId ? tab.status : "idle",
+            cwd,
+            account: bootstrap.account,
+            availableModels: bootstrap.models,
+            selectedModel:
+              tab.selectedModel ??
+              bootstrap.models.find((model) => model.isDefault)?.model ??
+              bootstrap.models[0]?.model
+          }))
+        )
+      );
+      await get().persist();
+    } catch (error) {
+      set((state) =>
+        withWorkspace(state, (workspace) =>
+          updateCodeTab(workspace, tabId, (tab) => ({
+            ...tab,
+            status: "error",
+            lastError: error instanceof Error ? error.message : "Failed to load Codex models."
+          }))
+        )
+      );
+    }
+  },
+  updateCodeDraft: (tabId, draft) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          draft
+        }))
+      )
+    );
+  },
+  setCodeModel: (tabId, model) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          selectedModel: model
+        }))
+      )
+    );
+    void get().persist();
+  },
+  setCodeReasoningEffort: (tabId, effort) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          reasoningEffort: effort
+        }))
+      )
+    );
+    void get().persist();
+  },
+  setCodeRuntimeMode: (tabId, mode) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          runtimeMode: mode
+        }))
+      )
+    );
+    void get().persist();
+  },
+  setCodeInteractionMode: (tabId, mode) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          interactionMode: mode
+        }))
+      )
+    );
+    void get().persist();
+  },
+  addCodeAttachment: (tabId, attachment) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          attachments: [...tab.attachments, attachment]
+        }))
+      )
+    );
+  },
+  removeCodeAttachment: (tabId, attachmentId) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          attachments: tab.attachments.filter((attachment) => attachment.id !== attachmentId)
+        }))
+      )
+    );
+  },
+  submitCodeTurn: async (tabId) => {
+    let context = getCodeContext(get(), tabId);
+    if (!context) {
+      return;
+    }
+
+    const text = context.tab.draft.trim();
+    const attachments = context.tab.attachments;
+    if (!text && attachments.length === 0) {
+      return;
+    }
+
+    const cwd = getSelectedGitRepoRoot(context.workspace, context.project);
+    if (!cwd) {
+      return;
+    }
+
+    if (context.tab.availableModels.length === 0) {
+      await get().ensureCodeBootstrap(tabId);
+      context = getCodeContext(get(), tabId);
+      if (!context) {
+        return;
+      }
+    }
+
+    if (!context.tab.threadId || context.tab.status === "closed") {
+      await window.naeditor.startCodeSession({
+        sessionId: tabId,
+        project: context.project,
+        cwd,
+        model: context.tab.selectedModel,
+        reasoningEffort: context.tab.reasoningEffort,
+        runtimeMode: context.tab.runtimeMode,
+        interactionMode: context.tab.interactionMode
+      });
+    }
+
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          draft: "",
+          attachments: [],
+          lastError: undefined
+        }))
+      )
+    );
+
+    await window.naeditor.sendCodeTurn({
+      sessionId: tabId,
+      input: text,
+      attachments,
+      model: context.tab.selectedModel,
+      reasoningEffort: context.tab.reasoningEffort,
+      interactionMode: context.tab.interactionMode
+    });
+    void get().persist();
+  },
+  interruptCodeTurn: async (tabId) => {
+    const context = getCodeContext(get(), tabId);
+    if (!context?.tab.threadId) {
+      return;
+    }
+    await window.naeditor.interruptCodeTurn(tabId);
+  },
+  respondToCodeRequest: async (tabId, decision, answers) => {
+    const context = getCodeContext(get(), tabId);
+    const requestId = context?.tab.pendingRequest?.requestId;
+    if (!context || !requestId) {
+      return;
+    }
+    await window.naeditor.respondToCodeRequest(tabId, requestId, decision, answers);
+  },
+  handleCodeEvent: (event) => {
+    const workspaceEntries = Object.entries(get().workspaces);
+    const owner = workspaceEntries.find(([, workspace]) =>
+      workspace.codeTabs.some((tab) => tab.id === event.sessionId)
+    );
+
+    if (!owner) {
+      return;
+    }
+
+    const [projectId] = owner;
+    set((state) => {
+      const workspace = state.workspaces[projectId];
+      if (!workspace) {
+        return state;
+      }
+
+      const nextWorkspace = updateCodeTab(workspace, event.sessionId, (tab) => {
+        switch (event.type) {
+          case "session.started":
+            return {
+              ...tab,
+              ...(event.title ? { title: event.title } : {}),
+              status: event.status,
+              threadId: event.threadId,
+              cwd: event.cwd,
+              sessionPath: event.sessionPath,
+              account: event.account,
+              availableModels: event.models,
+              selectedModel:
+                tab.selectedModel ??
+                event.models.find((model) => model.isDefault)?.model ??
+                event.models[0]?.model,
+              lastError: undefined
+            };
+          case "session.state":
+            return {
+              ...tab,
+              status: event.status,
+              ...(event.threadId ? { threadId: event.threadId } : {}),
+              ...(event.message && event.status === "error"
+                ? { lastError: event.message }
+                : {})
+            };
+          case "turn.started":
+            return {
+              ...tab,
+              status: "running",
+              pendingRequest: undefined
+            };
+          case "turn.completed":
+            {
+              const nextMessages = [...tab.messages];
+              const lastAssistantIndex = [...nextMessages]
+                .reverse()
+                .findIndex((message) => message.kind === "assistant");
+              if (lastAssistantIndex >= 0) {
+                const targetIndex = nextMessages.length - 1 - lastAssistantIndex;
+                const target = nextMessages[targetIndex];
+                if (target) {
+                  nextMessages[targetIndex] = {
+                    ...target,
+                    completedAt: event.completedAt,
+                    ...(event.elapsedMs ? { elapsedMs: event.elapsedMs } : {}),
+                    ...(event.changedFiles ? { changedFiles: event.changedFiles } : {})
+                  };
+                }
+              }
+              return {
+                ...tab,
+                status: event.status === "completed" ? "ready" : "error",
+                messages: nextMessages,
+                ...(event.error ? { lastError: event.error } : {})
+              };
+            }
+          case "thread.compacted":
+            return {
+              ...tab,
+              messages: [
+                ...tab.messages,
+                {
+                  id: `${event.sessionId}-compacted-${event.at}`,
+                  kind: "status",
+                  title: "Context compacted",
+                  text: event.summary ?? "Codex compacted earlier context to keep the thread moving.",
+                  createdAt: event.at
+                }
+              ]
+            };
+          case "message.started": {
+            const existingIndex = tab.messages.findIndex((message) => message.id === event.message.id);
+            const nextMessages = [...tab.messages];
+            if (existingIndex >= 0) {
+              nextMessages[existingIndex] = event.message;
+            } else {
+              nextMessages.push(event.message);
+            }
+            return {
+              ...tab,
+              messages: nextMessages
+            };
+          }
+          case "message.delta":
+            {
+              const nextMessages = tab.messages.map((message) =>
+                message.id === event.messageId
+                  ? {
+                      ...message,
+                      text: `${message.text}${event.delta}`,
+                      streaming: true
+                    }
+                  : message
+              );
+              return {
+              ...tab,
+              messages: nextMessages
+            };
+            }
+          case "message.completed":
+            {
+              const nextMessages = tab.messages.map((message) =>
+                message.id === event.messageId
+                  ? {
+                      ...message,
+                      ...(event.text ? { text: event.text } : {}),
+                      streaming: false
+                    }
+                  : message
+              );
+              return {
+              ...tab,
+              messages: nextMessages
+            };
+            }
+          case "request.opened":
+            return {
+              ...tab,
+              status: "waiting",
+              pendingRequest: event.request
+            };
+          case "request.resolved":
+            return {
+              ...tab,
+              pendingRequest:
+                tab.pendingRequest?.requestId === event.requestId ? undefined : tab.pendingRequest,
+              status: "running"
+            };
+          case "token-usage.updated":
+            return {
+              ...tab,
+              tokenUsage: event.usage
+            };
+          case "error":
+            return {
+              ...tab,
+              status: "error",
+              lastError: event.message
+            };
+          default:
+            return tab;
+        }
+      });
+
+      return {
+        workspaces: {
+          ...state.workspaces,
+          [projectId]: nextWorkspace
+        }
+      };
+    });
   },
   setBrowserUrl: (url) => {
     set((state) =>

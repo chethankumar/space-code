@@ -10,6 +10,10 @@ import net from "node:net";
 import type {
   AppCommand,
   AppStateSnapshot,
+  CodeBootstrap,
+  CodeSessionEvent,
+  CodeSessionStartInput,
+  CodeTurnInput,
   FileNode,
   GitBranchInfo,
   GitCompareDetails,
@@ -28,6 +32,7 @@ import type {
   ShellCommandResult,
   TerminalSessionInfo
 } from "../shared/types";
+import { CodexHost } from "./codex-host";
 
 const execAsync = promisify(exec);
 const STATE_FILE = "naeditor-state.json";
@@ -50,6 +55,7 @@ const terminalRequests = new Map<
   }
 >();
 let terminalHost: ChildProcess | null = null;
+const codexHost = new CodexHost();
 const portForwards = new Map<
   string,
   {
@@ -60,6 +66,10 @@ const portForwards = new Map<
 
 const colorPalette = ["#E76F51", "#2A9D8F", "#E9C46A", "#457B9D", "#F4A261", "#8AB17D"];
 const ignoredNames = new Set([".git", "node_modules", "dist", ".next"]);
+
+codexHost.on("event", (event: CodeSessionEvent) => {
+  mainWindow?.webContents.send("code:event", event);
+});
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -1776,6 +1786,49 @@ app.whenReady().then(() => {
 
     sendTerminalHostMessage("close", { sessionId });
     terminalSessions.delete(sessionId);
+  });
+  ipcMain.handle(
+    "code:get-bootstrap",
+    async (_event, payload: { project: ProjectRecord; cwd: string }): Promise<CodeBootstrap> => {
+      if (payload.project.kind !== "local") {
+        throw new Error("Code is currently available only for local projects.");
+      }
+      return codexHost.getBootstrap(payload.cwd);
+    }
+  );
+  ipcMain.handle("code:start-session", async (_event, input: CodeSessionStartInput) => {
+    if (input.project.kind !== "local") {
+      throw new Error("Code is currently available only for local projects.");
+    }
+    await codexHost.startSession(input);
+  });
+  ipcMain.handle("code:send-turn", async (_event, input: CodeTurnInput) => {
+    await codexHost.sendTurn(input);
+  });
+  ipcMain.handle("code:interrupt-turn", async (_event, payload: { sessionId: string; turnId?: string }) => {
+    await codexHost.interruptTurn(payload.sessionId, payload.turnId);
+  });
+  ipcMain.handle(
+    "code:respond-to-request",
+    async (
+      _event,
+      payload: {
+        sessionId: string;
+        requestId: string;
+        decision: "approved" | "denied";
+        answers?: Record<string, string | string[]>;
+      }
+    ) => {
+      await codexHost.respondToRequest(
+        payload.sessionId,
+        payload.requestId,
+        payload.decision,
+        payload.answers
+      );
+    }
+  );
+  ipcMain.handle("code:stop-session", async (_event, sessionId: string) => {
+    codexHost.stopSession(sessionId);
   });
   ipcMain.handle("browser:sync-view", async () => undefined);
   ipcMain.handle("browser:hide-view", async () => undefined);
