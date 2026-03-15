@@ -71,6 +71,7 @@ type InspectorProps = {
   onFetchGit: (projectId: string) => Promise<ShellCommandResult | null>;
   onPullGit: (projectId: string) => Promise<ShellCommandResult | null>;
   onPushGit: (projectId: string) => Promise<ShellCommandResult | null>;
+  onRefreshGit: (projectId: string) => Promise<void>;
 };
 
 export function Inspector({
@@ -103,7 +104,8 @@ export function Inspector({
   onCreateGitBranch,
   onFetchGit,
   onPullGit,
-  onPushGit
+  onPushGit,
+  onRefreshGit
 }: InspectorProps) {
   const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
@@ -150,8 +152,32 @@ export function Inspector({
   useEffect(() => {
     if (project?.rootPath && workspace?.track.inspector.mode === "files") {
       void ensureDirectory(project.rootPath);
+      if (project.id && project.rootPath) {
+        void window.naeditor.startFileWatch(project.id, project.rootPath);
+      }
     }
   }, [ensureDirectory, project?.rootPath, workspace?.track.inspector.mode]);
+
+  useEffect(() => {
+    if (!project?.rootPath || !project.id) {
+      return;
+    }
+
+    const handleFileChange = () => {
+      void ensureDirectory(project.rootPath!);
+    };
+
+    const unsubscribe = window.naeditor.onFileChange((payload) => {
+      if (payload.projectId === project.id) {
+        handleFileChange();
+      }
+    });
+
+    return () => {
+      void window.naeditor.stopFileWatch(project.id, project.rootPath!);
+      unsubscribe();
+    };
+  }, [project?.id, project?.rootPath, ensureDirectory]);
 
   useEffect(() => {
     if (project?.rootPath) {
@@ -176,6 +202,24 @@ export function Inspector({
       })
       .finally(() => setGitMetaLoading(false));
   }, [listGitBranches, listGitGraph, listGitRepositories, project, workspace?.track.inspector.mode, workspace?.git?.branch, workspace?.selectedGitRepoPath]);
+
+  useEffect(() => {
+    if (!project?.rootPath || !project.id || !onRefreshGit) {
+      return;
+    }
+
+    if (workspace?.track.inspector.mode !== "git" && workspace?.track.inspector.mode !== "branches") {
+      return;
+    }
+
+    const unsubscribe = window.naeditor.onFileChange((payload) => {
+      if (payload.projectId === project.id) {
+        void onRefreshGit(project.id);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [project?.id, project?.rootPath, onRefreshGit, workspace?.track.inspector.mode]);
 
   useEffect(() => {
     if (!pendingGitRepoPath) {
@@ -225,6 +269,20 @@ export function Inspector({
       <div className="inspector__content">
         {workspace.track.inspector.mode === "files" && (
           <div className="inspector__panel">
+            {project?.rootPath && (
+              <div className="inspector__heading-row file-explorer__header">
+                <div className="inspector__heading file-explorer__title">
+                  {project.rootPath.split(/[/\\]/).pop()}
+                </div>
+                <button
+                  className="ghost-button file-explorer__refresh"
+                  onClick={() => project.rootPath && void ensureDirectory(project.rootPath)}
+                  title="Refresh"
+                >
+                  <RefreshCw size={14} strokeWidth={2} />
+                </button>
+              </div>
+            )}
             {directoryEntries.length === 0 ? (
               <p className="muted">No directory entries loaded yet.</p>
             ) : (

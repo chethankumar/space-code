@@ -2,11 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, watch } from "node:fs";
 import { exec, fork, spawn } from "node:child_process";
 import type { ChildProcess, ChildProcessWithoutNullStreams } from "node:child_process";
 import { promisify } from "node:util";
 import net from "node:net";
+import * as chokidar from "chokidar";
 import type {
   AppCommand,
   AppStateSnapshot,
@@ -66,6 +67,41 @@ const portForwards = new Map<
 
 const colorPalette = ["#E76F51", "#2A9D8F", "#E9C46A", "#457B9D", "#F4A261", "#8AB17D"];
 const ignoredNames = new Set([".git", "node_modules", "dist", ".next"]);
+
+const fileWatchers = new Map<string, chokidar.FSWatcher>();
+const directoryCacheByProject = new Map<string, Map<string, FileNode[]>>();
+
+function getOrCreateWatcher(projectId: string, rootPath: string): chokidar.FSWatcher {
+  const key = `${projectId}:${rootPath}`;
+  
+  if (fileWatchers.has(key)) {
+    return fileWatchers.get(key)!;
+  }
+
+  const watcher = chokidar.watch(rootPath, {
+    ignored: /(^|[\/\\])\.|node_modules/,
+    persistent: true,
+    ignoreInitial: true,
+    depth: 10
+  });
+
+  watcher.on("all", (event, filePath) => {
+    console.log(`[naeditor] File ${event}: ${filePath}`);
+    mainWindow?.webContents.send("fs:file-changed", { projectId, rootPath, event, filePath });
+  });
+
+  fileWatchers.set(key, watcher);
+  return watcher;
+}
+
+function closeWatcher(projectId: string, rootPath: string) {
+  const key = `${projectId}:${rootPath}`;
+  const watcher = fileWatchers.get(key);
+  if (watcher) {
+    watcher.close();
+    fileWatchers.delete(key);
+  }
+}
 
 codexHost.on("event", (event: CodeSessionEvent) => {
   mainWindow?.webContents.send("code:event", event);
@@ -201,7 +237,7 @@ function ensureTerminalHost() {
     if (typed.type === "terminal-data") {
       const session = terminalSessions.get(typed.payload.sessionId);
       if (session) {
-        session.buffer = `${session.buffer}${typed.payload.data}`.slice(-10_000_000);
+        session.buffer = `${session.buffer}${typed.payload.data}`;
       }
       mainWindow?.webContents.send("terminal:data", typed.payload);
       return;
@@ -1734,9 +1770,23 @@ app.whenReady().then(() => {
   ipcMain.handle("app:load-state", async () => loadStateFile());
   ipcMain.handle("app:save-state", async (_event, snapshot: AppStateSnapshot) => saveStateFile(snapshot));
   ipcMain.handle("dialog:open-project-directory", async () => openProjectDirectory());
-  ipcMain.handle("fs:read-directory", async (_event, payload: { project: ProjectRecord; rootPath: string }) =>
-    readProjectDirectory(payload.project, payload.rootPath)
-  );
+  ipcMain.handle("fs:read-directory", async (_event, payload: { project: ProjectRecord; rootPath: string }) => {
+    const result = await readProjectDirectory(payload.project, payload.rootPath);
+    
+    getOrCreateWatcher(payload.project.id, payload.rootPath);
+    
+    return result;
+  });
+
+  ipcMain.handle("fs:start-watch", async (_event, payload: { projectId: string; rootPath: string }) => {
+    getOrCreateWatcher(payload.projectId, payload.rootPath);
+    return true;
+  });
+
+  ipcMain.handle("fs:stop-watch", async (_event, payload: { projectId: string; rootPath: string }) => {
+    closeWatcher(payload.projectId, payload.rootPath);
+    return true;
+  });
   ipcMain.handle("fs:read-file", async (_event, payload: { project: ProjectRecord; path: string }) =>
     readProjectFile(payload.project, payload.path)
   );

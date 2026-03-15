@@ -425,6 +425,7 @@ export function App() {
                   onFetchGit={fetchGit}
                   onPullGit={pullGit}
                   onPushGit={pushGit}
+                  onRefreshGit={refreshGit}
                 />
               ) : null
             }

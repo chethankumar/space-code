@@ -153,7 +153,7 @@ export function TerminalSurface({
         [paneId]: {
           ...(current[paneId] ?? { buffer: "" }),
           sessionId: payload.sessionId,
-          buffer: `${current[paneId]?.buffer ?? ""}${payload.data}`.slice(-10_000_000),
+          buffer: `${current[paneId]?.buffer ?? ""}${payload.data}`,
           exitCode: current[paneId]?.exitCode
         }
       }));
@@ -385,6 +385,19 @@ function TerminalPaneView({ paneId: _paneId, runtime, active, onFocus, appSettin
       safeFit(containerRef.current, fitAddonRef.current);
     }
   }, [active]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (terminalRef.current && runtime?.sessionId) {
+        terminalRef.current.focus();
+        safeFit(containerRef.current, fitAddonRef.current);
+        void window.naeditor.resizeTerminal(runtime.sessionId, terminalRef.current.cols, terminalRef.current.rows);
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [runtime?.sessionId]);
 
   return (
     <div className="terminal-pane__shell" onMouseDown={onFocus}>

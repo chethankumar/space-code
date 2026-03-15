@@ -36,6 +36,10 @@ contextBridge.exposeInMainWorld("naeditor", {
     ipcRenderer.invoke("dialog:open-project-directory") as Promise<ProjectRecord | null>,
   readDirectory: (project: ProjectRecord, rootPath: string) =>
     ipcRenderer.invoke("fs:read-directory", { project, rootPath }) as Promise<FileNode[]>,
+  startFileWatch: (projectId: string, rootPath: string) =>
+    ipcRenderer.invoke("fs:start-watch", { projectId, rootPath }) as Promise<boolean>,
+  stopFileWatch: (projectId: string, rootPath: string) =>
+    ipcRenderer.invoke("fs:stop-watch", { projectId, rootPath }) as Promise<boolean>,
   readFile: (project: ProjectRecord, path: string) =>
     ipcRenderer.invoke("fs:read-file", { project, path }) as Promise<string>,
   writeFile: (project: ProjectRecord, path: string, content: string) =>
@@ -166,5 +170,13 @@ contextBridge.exposeInMainWorld("naeditor", {
     return () => ipcRenderer.removeListener("app:command", wrapped);
   },
   getGitDetails: (project: ProjectRecord, repoRootPath?: string) =>
-    ipcRenderer.invoke("git:get-details", { project, repoRootPath }) as Promise<GitDetails | null>
+    ipcRenderer.invoke("git:get-details", { project, repoRootPath }) as Promise<GitDetails | null>,
+  onFileChange: (listener: (payload: { projectId: string; rootPath: string; event: string; filePath: string }) => void) => {
+    const wrapped = (
+      _event: IpcRendererEvent,
+      payload: { projectId: string; rootPath: string; event: string; filePath: string }
+    ) => listener(payload);
+    ipcRenderer.on("fs:file-changed", wrapped);
+    return () => ipcRenderer.removeListener("fs:file-changed", wrapped);
+  }
 });

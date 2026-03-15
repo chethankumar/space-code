@@ -677,6 +677,8 @@ export type NaEditorApi = {
   saveState: (snapshot: AppStateSnapshot) => Promise<void>;
   openProjectDirectory: () => Promise<ProjectRecord | null>;
   readDirectory: (project: ProjectRecord, rootPath: string) => Promise<FileNode[]>;
+  startFileWatch: (projectId: string, rootPath: string) => Promise<boolean>;
+  stopFileWatch: (projectId: string, rootPath: string) => Promise<boolean>;
   readFile: (project: ProjectRecord, path: string) => Promise<string>;
   writeFile: (project: ProjectRecord, path: string, content: string) => Promise<void>;
   searchProject: (project: ProjectRecord, query: string, options?: SearchQueryOptions) => Promise<SearchMatch[]>;
@@ -741,6 +743,7 @@ export type NaEditorApi = {
   stopPortForward: (projectId: string) => Promise<void>;
   runCommand: (cwd: string, command: string) => Promise<ShellCommandResult>;
   onAppCommand: (listener: (command: AppCommand) => void) => () => void;
+  onFileChange: (listener: (payload: { projectId: string; rootPath: string; event: string; filePath: string }) => void) => () => void;
 };
 
 declare global {
