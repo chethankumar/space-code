@@ -42,6 +42,7 @@ export function App() {
   const setSurfaceWidth = useAppStore((state) => state.setSurfaceWidth);
   const moveSurface = useAppStore((state) => state.moveSurface);
   const toggleTrackControls = useAppStore((state) => state.toggleTrackControls);
+  const toggleSurfaceVisibility = useAppStore((state) => state.toggleSurfaceVisibility);
   const ensureDirectory = useAppStore((state) => state.ensureDirectory);
   const searchProject = useAppStore((state) => state.searchProject);
   const openSearchResult = useAppStore((state) => state.openSearchResult);
@@ -380,6 +381,7 @@ export function App() {
           onSetSurfaceWidth={setSurfaceWidth}
           onMoveSurface={moveSurface}
           onToggleControls={toggleTrackControls}
+          onToggleSurfaceVisibility={toggleSurfaceVisibility}
         />
 
         <div className="workspace-shell">

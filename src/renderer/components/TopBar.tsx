@@ -1,10 +1,10 @@
 import clsx from "clsx";
-import { ArrowLeftRight, ChevronLeft, ChevronRight, Settings2 } from "lucide-react";
+import { ArrowLeftRight, ChevronLeft, ChevronRight, EyeOff, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { GitDetails, ProjectRecord, SnapWidth, SurfaceId, WorkspaceTrackState } from "@shared/types";
-import { getTrackWidth, normalizeSurfaceOrder, snapWidthToRatio } from "@renderer/lib/workspace";
+import { getTrackWidth, getVisibleSurfaceOrder, normalizeSurfaceOrder, snapWidthToRatio } from "@renderer/lib/workspace";
 
-const widthOptions: SnapWidth[] = ["1/3", "1/2", "2/3", "3/4", "1/1"];
+const widthOptions: SnapWidth[] = ["1/4", "1/3", "1/2", "2/3", "3/4", "1/1"];
 
 type TopBarProps = {
   project?: ProjectRecord;
@@ -14,9 +14,19 @@ type TopBarProps = {
   onSetSurfaceWidth: (surface: SurfaceId, width: SnapWidth) => void;
   onMoveSurface: (surface: SurfaceId, direction: "left" | "right") => void;
   onToggleControls: () => void;
+  onToggleSurfaceVisibility: (surface: SurfaceId) => void;
 };
 
-export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth, onMoveSurface, onToggleControls }: TopBarProps) {
+export function TopBar({
+  project,
+  track,
+  git,
+  onAnchorSurface,
+  onSetSurfaceWidth,
+  onMoveSurface,
+  onToggleControls,
+  onToggleSurfaceVisibility
+}: TopBarProps) {
   const [selectedSurface, setSelectedSurface] = useState<SurfaceId>("editor");
 
   useEffect(() => {
@@ -26,17 +36,21 @@ export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth
   }, [track?.activeSurface]);
 
   const total = track ? getTrackWidth(track) : 1;
-  const order = useMemo<SurfaceId[]>(
+  const visibleOrder = useMemo<SurfaceId[]>(
+    () => (track ? getVisibleSurfaceOrder(track) : ["editor", "code", "terminal", "browser"]),
+    [track]
+  );
+  const allSurfaces = useMemo<SurfaceId[]>(
     () => (track ? normalizeSurfaceOrder(track.order) : ["editor", "code", "terminal", "browser"]),
     [track]
   );
-  const selected = selectedSurface;
-  const selectedIndex = order.indexOf(selected);
+  const selected = visibleOrder.includes(selectedSurface) ? selectedSurface : visibleOrder[0] ?? "editor";
+  const selectedIndex = visibleOrder.indexOf(selected);
   const segmentWidths = useMemo(
     () =>
       track
         ? (Object.fromEntries(
-            order.map((surface) => [surface, `${(snapWidthToRatio[track.widths[surface]] / total) * 100}%`])
+            visibleOrder.map((surface) => [surface, `${(snapWidthToRatio[track.widths[surface]] / total) * 100}%`])
           ) as Record<SurfaceId, string>)
         : ({
             editor: "25%",
@@ -44,7 +58,7 @@ export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth
             terminal: "25%",
             browser: "25%"
           } as Record<SurfaceId, string>),
-    [order, total, track]
+    [total, track, visibleOrder]
   );
 
   if (!project || !track) {
@@ -83,7 +97,7 @@ export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth
         <div className="top-bar__track-head">
           <div className="top-bar__minimap">
             <div className="top-bar__segments">
-              {order.map((surface) => (
+              {visibleOrder.map((surface) => (
                 <button
                   key={surface}
                   className={clsx(
@@ -138,12 +152,34 @@ export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth
               </div>
               <button
                 className="top-bar__control-button"
-                disabled={selectedIndex === -1 || selectedIndex >= order.length - 1}
+                disabled={selectedIndex === -1 || selectedIndex >= visibleOrder.length - 1}
                 onClick={() => onMoveSurface(selected, "right")}
                 title={`Move ${selected} right`}
               >
                 <ChevronRight size={14} strokeWidth={1.9} />
               </button>
+            </div>
+
+            <div className="top-bar__visibility-picker">
+              {allSurfaces.map((surface) => {
+                const visible = track.visibleSurfaces[surface] ?? true;
+                const isLastVisible = visible && visibleOrder.length <= 1;
+                return (
+                  <button
+                    key={surface}
+                    className={clsx(
+                      "top-bar__visibility-toggle",
+                      visible && "top-bar__visibility-toggle--active"
+                    )}
+                    disabled={isLastVisible}
+                    onClick={() => onToggleSurfaceVisibility(surface)}
+                    title={visible ? `Hide ${surface}` : `Show ${surface}`}
+                  >
+                    <span>{surface}</span>
+                    {!visible ? <EyeOff size={12} strokeWidth={2} /> : null}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="top-bar__width-picker">

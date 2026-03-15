@@ -11,6 +11,7 @@ import type {
 } from "@shared/types";
 
 export const snapWidthToRatio: Record<SnapWidth, number> = {
+  "1/4": 1 / 4,
   "1/3": 1 / 3,
   "1/2": 1 / 2,
   "2/3": 2 / 3,
@@ -18,8 +19,14 @@ export const snapWidthToRatio: Record<SnapWidth, number> = {
   "1/1": 1
 };
 
-const widthOrder: SnapWidth[] = ["1/3", "1/2", "2/3", "3/4", "1/1"];
+const widthOrder: SnapWidth[] = ["1/4", "1/3", "1/2", "2/3", "3/4", "1/1"];
 export const defaultSurfaceOrder: SurfaceId[] = ["editor", "code", "terminal", "browser"];
+export const defaultSurfaceVisibility: Record<SurfaceId, boolean> = {
+  editor: true,
+  code: true,
+  terminal: true,
+  browser: true
+};
 
 export const defaultTrackState: WorkspaceTrackState = {
   order: [...defaultSurfaceOrder],
@@ -29,6 +36,7 @@ export const defaultTrackState: WorkspaceTrackState = {
     terminal: "2/3",
     browser: "1/1"
   },
+  visibleSurfaces: { ...defaultSurfaceVisibility },
   activeSurface: "editor",
   viewportOffset: 0,
   controlsVisible: false,
@@ -48,6 +56,7 @@ export function createEmptyWorkspace(): ProjectWorkspace {
     track: {
       order: [...defaultTrackState.order],
       widths: { ...defaultTrackState.widths },
+      visibleSurfaces: { ...defaultTrackState.visibleSurfaces },
       activeSurface: defaultTrackState.activeSurface,
       viewportOffset: defaultTrackState.viewportOffset,
       controlsVisible: defaultTrackState.controlsVisible,
@@ -123,7 +132,7 @@ type SurfaceSegment = {
 
 export function deriveSurfaceSegments(track: WorkspaceTrackState): SurfaceSegment[] {
   let cursor = 0;
-  return track.order.map((surface) => {
+  return getVisibleSurfaceOrder(track).map((surface) => {
     const width = snapWidthToRatio[track.widths[surface]];
     const segment = {
       surface,
@@ -204,4 +213,20 @@ export function normalizeSurfaceOrder(order?: SurfaceId[]): SurfaceId[] {
   const next = Array.isArray(order) ? order.filter((surface): surface is SurfaceId => defaultSurfaceOrder.includes(surface)) : [];
   const missing = defaultSurfaceOrder.filter((surface) => !next.includes(surface));
   return [...next, ...missing];
+}
+
+export function normalizeSurfaceVisibility(visibleSurfaces?: Partial<Record<SurfaceId, boolean>>): Record<SurfaceId, boolean> {
+  return {
+    ...defaultSurfaceVisibility,
+    ...visibleSurfaces
+  };
+}
+
+export function isSurfaceVisible(track: WorkspaceTrackState, surface: SurfaceId) {
+  return track.visibleSurfaces[surface] ?? defaultSurfaceVisibility[surface];
+}
+
+export function getVisibleSurfaceOrder(track: WorkspaceTrackState): SurfaceId[] {
+  const visible = normalizeSurfaceOrder(track.order).filter((surface) => isSurfaceVisible(track, surface));
+  return visible.length > 0 ? visible : ["editor"];
 }

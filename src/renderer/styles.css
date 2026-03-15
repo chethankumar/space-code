@@ -775,8 +775,10 @@ button {
 .top-bar__track-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   min-height: 28px;
+  justify-content: flex-end;
 }
 
 .top-bar__settings-button {
@@ -852,6 +854,47 @@ button {
   border-radius: 7px;
   background: var(--color-surface-soft);
   box-shadow: inset 0 0 0 1px var(--color-border-faint);
+}
+
+.top-bar__visibility-picker {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--color-surface-soft);
+  box-shadow: inset 0 0 0 1px var(--color-border-faint);
+}
+
+.top-bar__visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.top-bar__visibility-toggle:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-strong);
+}
+
+.top-bar__visibility-toggle--active {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-text-strong);
+}
+
+.top-bar__visibility-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .top-bar__width-option {

@@ -47,6 +47,7 @@ import {
   getActiveSurfaceAtOffset,
   getNextWidth,
   getSurfaceAnchorOffset,
+  getVisibleSurfaceOrder,
   normalizeSurfaceOrder
 } from "@renderer/lib/workspace";
 
@@ -88,6 +89,7 @@ type AppStore = {
   setSurfaceWidth: (surface: SurfaceId, width: SnapWidth) => void;
   moveSurface: (surface: SurfaceId, direction: "left" | "right") => void;
   toggleTrackControls: () => void;
+  toggleSurfaceVisibility: (surface: SurfaceId) => void;
   ensureDirectory: (rootPath: string) => Promise<void>;
   searchProject: (projectId: string, query: string, options?: SearchQueryOptions) => Promise<SearchMatch[]>;
   openSearchResult: (projectId: string, match: SearchMatch, query?: string) => Promise<void>;
@@ -240,6 +242,23 @@ function getCodeContext(state: AppStore, tabId: string) {
   }
 
   return { project, workspace, tab };
+}
+
+function revealSurfaceInTrack(track: ProjectWorkspace["track"], surface: SurfaceId) {
+  const nextTrack = {
+    ...track,
+    visibleSurfaces: {
+      ...defaultTrackState.visibleSurfaces,
+      ...track.visibleSurfaces,
+      [surface]: true
+    },
+    activeSurface: surface
+  };
+
+  return {
+    ...nextTrack,
+    viewportOffset: getSurfaceAnchorOffset(nextTrack, surface)
+  };
 }
 
 function updateCodeTab(
@@ -479,6 +498,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 widths: {
                   ...defaultTrackState.widths,
                   ...workspace.track.widths
+                },
+                visibleSurfaces: {
+                  ...defaultTrackState.visibleSurfaces,
+                  ...workspace.track.visibleSurfaces
                 },
                 inspector: {
                   ...defaultTrackState.inspector,
@@ -747,11 +770,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) =>
       withWorkspace(state, (workspace) => ({
         ...workspace,
-        track: {
-          ...workspace.track,
-          activeSurface: surface,
-          viewportOffset: getSurfaceAnchorOffset(workspace.track, surface)
-        }
+        track: revealSurfaceInTrack(workspace.track, surface)
       }))
     );
     void get().persist();
@@ -813,23 +832,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set((state) =>
       withWorkspace(state, (workspace) => {
         const order = normalizeSurfaceOrder(workspace.track.order);
-        const currentIndex = order.indexOf(surface);
-        if (currentIndex === -1) {
+        const visibleOrder = getVisibleSurfaceOrder(workspace.track);
+        const currentVisibleIndex = visibleOrder.indexOf(surface);
+        if (currentVisibleIndex === -1) {
           return workspace;
         }
 
-        const nextIndex =
+        const swapTarget =
           direction === "left"
-            ? Math.max(0, currentIndex - 1)
-            : Math.min(order.length - 1, currentIndex + 1);
+            ? visibleOrder[currentVisibleIndex - 1]
+            : visibleOrder[currentVisibleIndex + 1];
 
-        if (nextIndex === currentIndex) {
+        if (!swapTarget) {
           return workspace;
         }
 
         const nextOrder = [...order];
-        const [moved] = nextOrder.splice(currentIndex, 1);
-        nextOrder.splice(nextIndex, 0, moved);
+        const currentIndex = nextOrder.indexOf(surface);
+        const swapIndex = nextOrder.indexOf(swapTarget);
+        if (currentIndex === -1 || swapIndex === -1) {
+          return workspace;
+        }
+
+        [nextOrder[currentIndex], nextOrder[swapIndex]] = [nextOrder[swapIndex], nextOrder[currentIndex]];
 
         const nextTrack = {
           ...workspace.track,
@@ -856,6 +881,52 @@ export const useAppStore = create<AppStore>((set, get) => ({
           controlsVisible: !(workspace.track.controlsVisible ?? false)
         }
       }))
+    );
+    void get().persist();
+  },
+  toggleSurfaceVisibility: (surface) => {
+    set((state) =>
+      withWorkspace(state, (workspace) => {
+        const visibleSurfaces = {
+          ...defaultTrackState.visibleSurfaces,
+          ...workspace.track.visibleSurfaces
+        };
+        const visibleOrder = getVisibleSurfaceOrder({
+          ...workspace.track,
+          visibleSurfaces
+        });
+        const currentlyVisible = visibleSurfaces[surface];
+
+        if (currentlyVisible && visibleOrder.length <= 1) {
+          return workspace;
+        }
+
+        const nextVisibleSurfaces = {
+          ...visibleSurfaces,
+          [surface]: !currentlyVisible
+        };
+        const nextTrackBase = {
+          ...workspace.track,
+          visibleSurfaces: nextVisibleSurfaces
+        };
+        const nextVisibleOrder = getVisibleSurfaceOrder(nextTrackBase);
+        const nextActiveSurface =
+          nextVisibleSurfaces[workspace.track.activeSurface] === false
+            ? nextVisibleOrder[0] ?? "editor"
+            : workspace.track.activeSurface;
+        const nextTrack = {
+          ...nextTrackBase,
+          activeSurface: nextActiveSurface
+        };
+
+        return {
+          ...workspace,
+          track: {
+            ...nextTrack,
+            viewportOffset: getSurfaceAnchorOffset(nextTrack, nextActiveSurface)
+          }
+        };
+      })
     );
     void get().persist();
   },
@@ -1292,11 +1363,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           ...workspace,
           codeTabs: [...workspace.codeTabs, nextTab],
           activeCodeTabId: nextTab.id,
-          track: {
-            ...workspace.track,
-            activeSurface: "code",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "code")
-          }
+          track: revealSurfaceInTrack(workspace.track, "code")
         };
       })
     );
@@ -1311,11 +1378,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return {
           ...workspace,
           activeCodeTabId: tabId,
-          track: {
-            ...workspace.track,
-            activeSurface: "code",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "code")
-          }
+          track: revealSurfaceInTrack(workspace.track, "code")
         };
       })
     );
@@ -1906,11 +1969,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             : tab
         ),
         portForward: undefined,
-        track: {
-          ...workspace.track,
-          activeSurface: "browser",
-          viewportOffset: getSurfaceAnchorOffset(workspace.track, "browser")
-        }
+        track: revealSurfaceInTrack(workspace.track, "browser")
       }))
     );
     void get().persist();
@@ -1923,11 +1982,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           ...workspace,
           terminalTabs: [...workspace.terminalTabs, nextTab],
           activeTerminalTabId: nextTab.id,
-          track: {
-            ...workspace.track,
-            activeSurface: "terminal",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "terminal")
-          }
+          track: revealSurfaceInTrack(workspace.track, "terminal")
         };
       })
     );
@@ -1943,11 +1998,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return {
           ...workspace,
           activeTerminalTabId: tabId,
-          track: {
-            ...workspace.track,
-            activeSurface: "terminal",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "terminal")
-          }
+          track: revealSurfaceInTrack(workspace.track, "terminal")
         };
       })
     );
@@ -2017,11 +2068,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         return {
           ...workspace,
           terminalTabs: nextTabs,
-          track: {
-            ...workspace.track,
-            activeSurface: "terminal",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "terminal")
-          }
+          track: revealSurfaceInTrack(workspace.track, "terminal")
         };
       })
     );
@@ -2069,11 +2116,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
               activePaneId: findFirstPaneId(nextRoot) ?? tab.activePaneId
             };
           }),
-          track: {
-            ...currentWorkspace.track,
-            activeSurface: "terminal",
-            viewportOffset: getSurfaceAnchorOffset(currentWorkspace.track, "terminal")
-          }
+          track: revealSurfaceInTrack(currentWorkspace.track, "terminal")
         };
       })
     );
@@ -2110,11 +2153,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           browserTabs: [...workspace.browserTabs, nextTab],
           activeBrowserTabId: nextTab.id,
           browserUrl: "",
-          track: {
-            ...workspace.track,
-            activeSurface: "browser",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "browser")
-          }
+          track: revealSurfaceInTrack(workspace.track, "browser")
         };
       })
     );
@@ -2175,11 +2214,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
           ...workspace,
           activeBrowserTabId: tabId,
           browserUrl: nextTab.url,
-          track: {
-            ...workspace.track,
-            activeSurface: "browser",
-            viewportOffset: getSurfaceAnchorOffset(workspace.track, "browser")
-          }
+          track: revealSurfaceInTrack(workspace.track, "browser")
         };
       })
     );

@@ -27,7 +27,7 @@ export type AppCommand =
   | "grow-surface"
   | "shrink-surface";
 
-export type SnapWidth = "1/3" | "1/2" | "2/3" | "3/4" | "1/1";
+export type SnapWidth = "1/4" | "1/3" | "1/2" | "2/3" | "3/4" | "1/1";
 
 export type InspectorMode =
   | "files"
@@ -358,6 +358,7 @@ export type AppSettings = {
 export type WorkspaceTrackState = {
   order: SurfaceId[];
   widths: Record<SurfaceId, SnapWidth>;
+  visibleSurfaces: Record<SurfaceId, boolean>;
   activeSurface: SurfaceId;
   viewportOffset: number;
   controlsVisible?: boolean;

@@ -1,5 +1,5 @@
 import type { AppSettings, ProjectRecord, ProjectWorkspace, SurfaceId } from "@shared/types";
-import { getTrackWidth, normalizeSurfaceOrder, snapWidthToRatio } from "@renderer/lib/workspace";
+import { getTrackWidth, getVisibleSurfaceOrder, snapWidthToRatio } from "@renderer/lib/workspace";
 import { EditorSurface } from "./EditorSurface";
 import { CodeSurface } from "./CodeSurface";
 import { TerminalSurface } from "./TerminalSurface";
@@ -106,7 +106,7 @@ export function WorkspaceTrack({
   }
 
   const total = getTrackWidth(workspace.track);
-  const surfaceOrder = normalizeSurfaceOrder(workspace.track.order);
+  const surfaceOrder = getVisibleSurfaceOrder(workspace.track);
   const selectedGitRepo = workspace.gitRepositories?.find((repo) => repo.rootPath === workspace.selectedGitRepoPath);
   const worktreeLabel =
     selectedGitRepo?.relativePath && selectedGitRepo.relativePath !== "."
