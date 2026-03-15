@@ -203,7 +203,7 @@ export type CodeTurnCompletedEvent = {
   turnId: string;
   status: "completed" | "failed" | "cancelled" | "interrupted";
   error?: string;
-  completedAt: string;
+  completedAt?: string;
   elapsedMs?: number;
   changedFiles?: Array<{
     path: string;
@@ -214,7 +214,7 @@ export type CodeTurnCompletedEvent = {
 export type CodeThreadCompactedEvent = {
   type: "thread.compacted";
   sessionId: string;
-  at: string;
+  at?: string;
   summary?: string;
 };
 

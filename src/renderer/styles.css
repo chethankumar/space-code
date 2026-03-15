@@ -2864,6 +2864,11 @@ button {
   white-space: nowrap;
 }
 
+.code-shell {
+  --code-chat-width: 760px;
+  --code-composer-width: 836px;
+}
+
 .code-thread {
   flex: 1;
   min-width: 0;
@@ -2875,7 +2880,7 @@ button {
 
 .code-thread__inner {
   display: flex;
-  width: min(760px, 100%);
+  width: min(var(--code-chat-width), 100%);
   min-height: 100%;
   margin: 0 auto;
   padding: 0 28px;
@@ -2888,7 +2893,7 @@ button {
 }
 
 .code-shell--empty .code-thread__inner {
-  width: min(760px, 100%);
+  width: min(var(--code-chat-width), 100%);
   padding: 0 28px;
 }
 
@@ -3155,6 +3160,30 @@ button {
     0 8px 24px color-mix(in srgb, #000 2%, transparent);
 }
 
+.code-command-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
+.code-command-group .code-command-block {
+  border-radius: 0;
+  box-shadow: none;
+  border-top-width: 0;
+}
+
+.code-command-group .code-command-block:first-child {
+  border-top-width: 1px;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+}
+
+.code-command-group .code-command-block:last-child {
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+}
+
 .code-command-block__icon {
   flex: 0 0 auto;
   color: var(--color-text-muted);
@@ -3338,6 +3367,10 @@ button {
   gap: 8px;
 }
 
+.code-message__footer--user {
+  align-items: flex-end;
+}
+
 .code-message__foot-meta {
   display: inline-flex;
   align-items: center;
@@ -3345,6 +3378,12 @@ button {
   flex-wrap: wrap;
   font-size: 0.72rem;
   color: var(--color-text-subtle);
+}
+
+.code-message__foot-meta--user {
+  justify-content: flex-end;
+  color: color-mix(in srgb, var(--color-text-muted) 88%, transparent);
+  font-size: 0.68rem;
 }
 
 .code-message__changed-files {
@@ -3606,7 +3645,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(980px, 100%);
+  width: min(var(--code-composer-width), 100%);
   margin: 12px auto 0;
   padding: 7px 8px 7px;
   border: 1px solid color-mix(in srgb, var(--color-border-soft) 96%, transparent);
@@ -3616,7 +3655,7 @@ button {
 }
 
 .code-composer__frame--session {
-  width: min(1380px, 100%);
+  width: min(var(--code-composer-width), 100%);
   gap: 8px;
   margin-top: 0;
   box-shadow:

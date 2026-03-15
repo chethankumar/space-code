@@ -1413,6 +1413,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const text = context.tab.draft.trim();
     const attachments = context.tab.attachments;
+    const previousThreadId = context.tab.threadId;
     if (!text && attachments.length === 0) {
       return;
     }
@@ -1438,7 +1439,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         model: context.tab.selectedModel,
         reasoningEffort: context.tab.reasoningEffort,
         runtimeMode: context.tab.runtimeMode,
-        interactionMode: context.tab.interactionMode
+        interactionMode: context.tab.interactionMode,
+        ...(previousThreadId ? { resumeThreadId: previousThreadId } : {})
       });
     }
 
@@ -1453,14 +1455,57 @@ export const useAppStore = create<AppStore>((set, get) => ({
       )
     );
 
-    await window.naeditor.sendCodeTurn({
-      sessionId: tabId,
-      input: text,
-      attachments,
-      model: context.tab.selectedModel,
-      reasoningEffort: context.tab.reasoningEffort,
-      interactionMode: context.tab.interactionMode
-    });
+    try {
+      await window.naeditor.sendCodeTurn({
+        sessionId: tabId,
+        input: text,
+        attachments,
+        model: context.tab.selectedModel,
+        reasoningEffort: context.tab.reasoningEffort,
+        interactionMode: context.tab.interactionMode
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to send follow-up to Codex.";
+      const shouldRecoverSession =
+        previousThreadId &&
+        /(Unknown code session|missing a thread id|Session stopped|Timed out waiting|closed)/i.test(
+          message
+        );
+
+      if (shouldRecoverSession) {
+        await window.naeditor.startCodeSession({
+          sessionId: tabId,
+          project: context.project,
+          cwd,
+          model: context.tab.selectedModel,
+          reasoningEffort: context.tab.reasoningEffort,
+          runtimeMode: context.tab.runtimeMode,
+          interactionMode: context.tab.interactionMode,
+          resumeThreadId: previousThreadId
+        });
+
+        await window.naeditor.sendCodeTurn({
+          sessionId: tabId,
+          input: text,
+          attachments,
+          model: context.tab.selectedModel,
+          reasoningEffort: context.tab.reasoningEffort,
+          interactionMode: context.tab.interactionMode
+        });
+      } else {
+        set((state) =>
+          withWorkspace(state, (workspace) =>
+            updateCodeTab(workspace, tabId, (tab) => ({
+              ...tab,
+              draft: text,
+              attachments,
+              lastError: message
+            }))
+          )
+        );
+        throw error;
+      }
+    }
     void get().persist();
   },
   interruptCodeTurn: async (tabId) => {
@@ -1540,8 +1585,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 if (target) {
                   nextMessages[targetIndex] = {
                     ...target,
-                    completedAt: event.completedAt,
-                    ...(event.elapsedMs ? { elapsedMs: event.elapsedMs } : {}),
+                    ...(event.completedAt ? { completedAt: event.completedAt } : {}),
+                    ...(event.elapsedMs !== undefined ? { elapsedMs: event.elapsedMs } : {}),
                     ...(event.changedFiles ? { changedFiles: event.changedFiles } : {})
                   };
                 }
@@ -1559,11 +1604,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
               messages: [
                 ...tab.messages,
                 {
-                  id: `${event.sessionId}-compacted-${event.at}`,
+                  id: `${event.sessionId}-compacted-${event.at ?? tab.messages.length}`,
                   kind: "status",
-                  title: "Context compacted",
-                  text: event.summary ?? "Codex compacted earlier context to keep the thread moving.",
-                  createdAt: event.at
+                  title: "Context auto-compacted",
+                  text:
+                    event.summary ??
+                    "Codex compacted earlier context to keep the thread moving.",
+                  ...(event.at ? { createdAt: event.at } : {})
                 }
               ]
             };

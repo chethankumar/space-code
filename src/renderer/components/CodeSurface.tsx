@@ -275,7 +275,29 @@ function formatMessageTime(value?: string) {
   if (Number.isNaN(date.getTime())) {
     return null;
   }
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+
+  if (sameDay) {
+    return `Today at ${new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(date)}`;
+  }
+
+  if (isYesterday) {
+    return `Yesterday at ${new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(date)}`;
+  }
+
   return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit"
   }).format(date);
@@ -736,6 +758,28 @@ export function CodeSurface({
   const isBusy = activeTab.status === "connecting" || activeTab.status === "running" || activeTab.status === "waiting";
   const canSend = (activeTab.draft.trim().length > 0 || activeTab.attachments.length > 0) && !isBusy;
   const isEmpty = activeTab.messages.length === 0;
+  const threadItems = useMemo(() => {
+    const source = activeTab.messages.filter((message) => message.kind !== "reasoning");
+    const grouped: Array<
+      | { kind: "command-group"; messages: typeof source }
+      | { kind: "message"; message: (typeof source)[number] }
+    > = [];
+
+    for (const message of source) {
+      if (message.kind === "tool") {
+        const previous = grouped[grouped.length - 1];
+        if (previous?.kind === "command-group") {
+          previous.messages.push(message);
+        } else {
+          grouped.push({ kind: "command-group", messages: [message] });
+        }
+        continue;
+      }
+      grouped.push({ kind: "message", message });
+    }
+
+    return grouped;
+  }, [activeTab.messages]);
   return (
     <section className="surface surface--code">
       <div className="surface__header">
@@ -798,52 +842,75 @@ export function CodeSurface({
             </div>
           ) : null}
 
-          {activeTab.messages
-            .filter((message) => message.kind !== "reasoning")
-            .map((message) => (
-            message.kind === "assistant" || message.kind === "user" ? (
+          {threadItems.map((item) => (
+            item.kind === "command-group" ? (
               <div
-                key={message.id}
-                className={`code-message code-message--${message.kind} ${
-                  message.streaming ? "code-message--streaming" : ""
+                key={item.messages.map((message) => message.id).join(":")}
+                className={`code-command-group${
+                  item.messages.some((message) => message.streaming) ? " code-command-group--streaming" : ""
                 }`}
               >
-                <div className="code-message__header">
-                  <div className="code-message__role">
-                    <span className="code-message__avatar">{getMessageBadge(message.kind)}</span>
-                    <span className="code-message__title">{getMessageTitle(message.kind, message.title)}</span>
-                  </div>
-                  {message.metadata ? (
-                    <div className="code-message__metadata">
-                      {Object.values(message.metadata).map((value) => (
-                        <span key={value} className="code-message__meta-chip">
-                          {value}
-                        </span>
-                      ))}
+                {item.messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`code-command-block${message.streaming ? " code-command-block--streaming" : ""}`}
+                  >
+                    <div className="code-command-block__icon">{">_"}</div>
+                    <div className="code-command-block__content">
+                      <span className="code-command-block__label">Command run -</span>
+                      <span className="code-command-block__text">{message.text || "Running command…"}</span>
                     </div>
-                  ) : null}
-                </div>
+                  </div>
+                ))}
+              </div>
+            ) : item.message.kind === "assistant" || item.message.kind === "user" ? (
+              <div
+                key={item.message.id}
+                className={`code-message code-message--${item.message.kind} ${
+                  item.message.streaming ? "code-message--streaming" : ""
+                }`}
+              >
+                {item.message.kind === "assistant" ? (
+                  <div className="code-message__header">
+                    <div className="code-message__role">
+                      <span className="code-message__avatar">{getMessageBadge(item.message.kind)}</span>
+                      <span className="code-message__title">{getMessageTitle(item.message.kind, item.message.title)}</span>
+                    </div>
+                    {item.message.metadata ? (
+                      <div className="code-message__metadata">
+                        {Object.values(item.message.metadata).map((value) => (
+                          <span key={value} className="code-message__meta-chip">
+                            {value}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="code-message__body">
-                  {message.text
-                    ? renderMessageBody(message.text)
-                    : message.streaming
+                  {item.message.text
+                    ? renderMessageBody(item.message.text)
+                    : item.message.streaming
                       ? "…"
                       : null}
                 </div>
-                {message.kind === "assistant" && (message.completedAt || message.elapsedMs || message.changedFiles?.length) ? (
+                {item.message.kind === "assistant" &&
+                (item.message.completedAt || item.message.elapsedMs !== undefined || item.message.changedFiles?.length) ? (
                   <div className="code-message__footer">
                     <div className="code-message__foot-meta">
-                      {formatMessageTime(message.completedAt ?? message.createdAt) ? (
-                        <span>{formatMessageTime(message.completedAt ?? message.createdAt)}</span>
+                      {formatMessageTime(item.message.completedAt ?? item.message.createdAt) ? (
+                        <span>
+                          Completed {formatMessageTime(item.message.completedAt ?? item.message.createdAt)}
+                        </span>
                       ) : null}
-                      {formatElapsedMs(message.elapsedMs) ? (
-                        <span>{formatElapsedMs(message.elapsedMs)}</span>
+                      {formatElapsedMs(item.message.elapsedMs) ? (
+                        <span>{formatElapsedMs(item.message.elapsedMs)}</span>
                       ) : null}
                     </div>
-                    {message.changedFiles?.length ? (
+                    {item.message.changedFiles?.length ? (
                       <div className="code-message__changed-files">
-                        {message.changedFiles.map((file) => (
-                          <span key={`${message.id}-${file.path}`} className="code-message__changed-file">
+                        {item.message.changedFiles.map((file) => (
+                          <span key={`${item.message.id}-${file.path}`} className="code-message__changed-file">
                             <span className={`code-message__changed-file-status code-message__changed-file-status--${file.status}`}>
                               {file.status === "modified"
                                 ? "M"
@@ -866,42 +933,34 @@ export function CodeSurface({
                     ) : null}
                   </div>
                 ) : null}
-                {message.kind === "user" && formatMessageTime(message.createdAt) ? (
-                  <div className="code-message__footer">
-                    <div className="code-message__foot-meta">
-                      <span>{formatMessageTime(message.createdAt)}</span>
+                {item.message.kind === "user" ? (
+                  <div className="code-message__footer code-message__footer--user">
+                    <div className="code-message__foot-meta code-message__foot-meta--user">
+                      <span>You</span>
+                      {formatMessageTime(item.message.createdAt) ? (
+                        <span>{formatMessageTime(item.message.createdAt)}</span>
+                      ) : null}
                     </div>
                   </div>
                 ) : null}
               </div>
-            ) : message.kind === "tool" ? (
-              <div
-                key={message.id}
-                className={`code-command-block${message.streaming ? " code-command-block--streaming" : ""}`}
-              >
-                <div className="code-command-block__icon">{">_"}</div>
-                <div className="code-command-block__content">
-                  <span className="code-command-block__label">Command run -</span>
-                  <span className="code-command-block__text">{message.text || "Running command…"}</span>
-                </div>
-              </div>
             ) : (
               <details
-                key={message.id}
-                className={`code-message code-message--${message.kind} code-message--event ${
-                  message.streaming ? "code-message--streaming" : ""
+                key={item.message.id}
+                className={`code-message code-message--${item.message.kind} code-message--event ${
+                  item.message.streaming ? "code-message--streaming" : ""
                 }`}
-                open={message.streaming || message.kind === "status"}
+                open={item.message.streaming || item.message.kind === "status"}
               >
                 <summary className="code-message__summary">
                   <div className="code-message__role">
-                    <span className="code-message__avatar">{getMessageBadge(message.kind)}</span>
-                    <span className="code-message__title">{getMessageTitle(message.kind, message.title)}</span>
+                    <span className="code-message__avatar">{getMessageBadge(item.message.kind)}</span>
+                    <span className="code-message__title">{getMessageTitle(item.message.kind, item.message.title)}</span>
                   </div>
                   <div className="code-message__summary-right">
-                    {message.metadata ? (
+                    {item.message.metadata ? (
                       <div className="code-message__metadata">
-                        {Object.values(message.metadata).map((value) => (
+                        {Object.values(item.message.metadata).map((value) => (
                           <span key={value} className="code-message__meta-chip">
                             {value}
                           </span>
@@ -912,9 +971,9 @@ export function CodeSurface({
                   </div>
                 </summary>
                 <div className="code-message__body">
-                  {message.text
-                    ? renderMessageBody(message.text)
-                    : message.streaming
+                  {item.message.text
+                    ? renderMessageBody(item.message.text)
+                    : item.message.streaming
                       ? "…"
                       : null}
                 </div>

@@ -39,7 +39,7 @@ type SessionContext = {
   threadId?: string;
   cwd: string;
   status: CodeSessionStatus;
-  activeTurns: Map<string, { startedAt: string }>;
+  activeTurns: Map<string, { startedAt?: string }>;
 };
 
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -218,13 +218,16 @@ function createBootstrapFromResponses(accountResponse: unknown, modelResponse: u
 
 function createMessageFromItem(
   item: Record<string, unknown>,
-  fallbackText = ""
+  fallbackText = "",
+  ...timestampSources: Array<unknown>
 ): CodeMessage | null {
   const itemType = asString(item.type);
   const id = asString(item.id);
   if (!itemType || !id) {
     return null;
   }
+
+  const createdAt = getCodexTimestamp(item, ...timestampSources);
 
   if (itemType === "userMessage") {
     const content = asArray(item.content) ?? [];
@@ -239,7 +242,7 @@ function createMessageFromItem(
       id,
       kind: "user",
       text,
-      createdAt: new Date().toISOString()
+      ...(createdAt ? { createdAt } : {})
     };
   }
 
@@ -249,7 +252,7 @@ function createMessageFromItem(
       kind: "assistant",
       text: asString(item.text) ?? fallbackText,
       streaming: true,
-      createdAt: new Date().toISOString()
+      ...(createdAt ? { createdAt } : {})
     };
   }
 
@@ -260,7 +263,7 @@ function createMessageFromItem(
       title: "Reasoning",
       text: asString(item.text) ?? fallbackText,
       streaming: true,
-      createdAt: new Date().toISOString()
+      ...(createdAt ? { createdAt } : {})
     };
   }
 
@@ -276,8 +279,44 @@ function createMessageFromItem(
     kind: "tool",
     title: itemType.replace(/([a-z])([A-Z])/g, "$1 $2"),
     text: detail,
-    createdAt: new Date().toISOString()
+    ...(createdAt ? { createdAt } : {})
   };
+}
+
+function getCodexTimestamp(...sources: Array<unknown>) {
+  const candidates = sources.flatMap((source) => {
+    const object = asObject(source);
+    if (!object) {
+      return [];
+    }
+
+    return [
+      asString(object.createdAt),
+      asString(object.created_at),
+      asString(object.timestamp),
+      asString(object.time),
+      asString(asObject(object.event)?.createdAt),
+      asString(asObject(object.event)?.created_at),
+      asString(asObject(object.thread)?.createdAt),
+      asString(asObject(object.thread)?.created_at),
+      asString(asObject(object.turn)?.createdAt),
+      asString(asObject(object.turn)?.created_at),
+      asString(asObject(object.item)?.createdAt),
+      asString(asObject(object.item)?.created_at)
+    ];
+  });
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return candidate;
+    }
+  }
+
+  return undefined;
 }
 
 function mapGitStatus(code: string): "added" | "modified" | "deleted" | "renamed" | "copied" | "untracked" | "unknown" {
@@ -741,19 +780,22 @@ export class CodexHost extends EventEmitter {
       return;
     }
 
+    const receivedAt = new Date().toISOString();
+
     if ("id" in message) {
-      this.handleProviderRequest(context, method, message.id as string | number, params);
+      this.handleProviderRequest(context, method, message.id as string | number, params, receivedAt);
       return;
     }
 
-    this.handleNotification(context, method, params);
+    this.handleNotification(context, method, params, message, receivedAt);
   }
 
   private handleProviderRequest(
     context: SessionContext,
     method: string,
     jsonRpcId: string | number,
-    params: Record<string, unknown> | undefined
+    params: Record<string, unknown> | undefined,
+    receivedAt: string
   ) {
     const requestId = asString(params?.requestId) ?? `${jsonRpcId}`;
     let request: CodePendingRequest | null = null;
@@ -827,7 +869,9 @@ export class CodexHost extends EventEmitter {
   private handleNotification(
     context: SessionContext,
     method: string,
-    params: Record<string, unknown> | undefined
+    params: Record<string, unknown> | undefined,
+    rawMessage?: Record<string, unknown>,
+    receivedAt?: string
   ) {
     if (method === "thread/status/changed") {
       const statusType = asString(asObject(params?.status)?.type);
@@ -852,7 +896,8 @@ export class CodexHost extends EventEmitter {
       const turn = asObject(params?.turn);
       const turnId = asString(turn?.id);
       if (turnId) {
-        context.activeTurns.set(turnId, { startedAt: new Date().toISOString() });
+        const startedAt = getCodexTimestamp(rawMessage, turn, params) ?? receivedAt;
+        context.activeTurns.set(turnId, { ...(startedAt ? { startedAt } : {}) });
         this.emitCodeEvent({
           type: "turn.started",
           sessionId: context.sessionId,
@@ -866,7 +911,7 @@ export class CodexHost extends EventEmitter {
       const turn = asObject(params?.turn);
       const turnId = asString(turn?.id);
       if (turnId) {
-        const completedAt = new Date().toISOString();
+        const completedAt = getCodexTimestamp(rawMessage, turn, params) ?? receivedAt;
         const startedTurn = context.activeTurns.get(turnId);
         context.activeTurns.delete(turnId);
         void collectChangedFiles(context.cwd).then((changedFiles) => {
@@ -883,8 +928,8 @@ export class CodexHost extends EventEmitter {
                     ? "interrupted"
                     : "completed",
             error: asString(turn?.error),
-            completedAt,
-            ...(startedTurn
+            ...(completedAt ? { completedAt } : {}),
+            ...(completedAt && startedTurn?.startedAt
               ? {
                   elapsedMs:
                     new Date(completedAt).getTime() - new Date(startedTurn.startedAt).getTime()
@@ -907,7 +952,7 @@ export class CodexHost extends EventEmitter {
       this.emitCodeEvent({
         type: "thread.compacted",
         sessionId: context.sessionId,
-        at: new Date().toISOString(),
+        at: getCodexTimestamp(rawMessage, params) ?? receivedAt,
         summary: asString(params?.summary)
       });
       return;
@@ -941,7 +986,9 @@ export class CodexHost extends EventEmitter {
 
     if (method === "item/started") {
       const item = asObject(params?.item);
-      const message = item ? createMessageFromItem(item) : null;
+      const message = item
+        ? createMessageFromItem(item, "", { createdAt: receivedAt }, rawMessage, params)
+        : null;
       if (message) {
         this.emitCodeEvent({
           type: "message.started",
