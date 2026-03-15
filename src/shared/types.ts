@@ -60,6 +60,17 @@ export type TerminalThemePreset =
   | "solarized-dark"
   | "solarized-light"
   | "gruvbox-dark";
+export type CodeThemePreset =
+  | "spacecode-dark"
+  | "spacecode-light"
+  | "github-dark"
+  | "github-light"
+  | "dracula"
+  | "nord"
+  | "solarized-dark"
+  | "solarized-light"
+  | "gruvbox-dark"
+  | "hc-black";
 
 export type CodeRuntimeMode = "full-access" | "approval-required";
 export type CodeInteractionMode = "default" | "plan";
@@ -337,6 +348,7 @@ export type AppSettings = {
   editorFontFamily: string;
   editorFontSize: number;
   editorTheme: EditorTheme;
+  codeTheme: CodeThemePreset;
   terminalFontFamily: string;
   terminalFontSize: number;
   terminalTheme: TerminalThemePreset;

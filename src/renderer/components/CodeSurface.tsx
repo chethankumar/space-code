@@ -20,6 +20,7 @@ import type {
   CodeReasoningEffort,
   CodeRuntimeMode,
   CodeTab,
+  CodeThemePreset,
   ProjectRecord
 } from "@shared/types";
 
@@ -30,6 +31,7 @@ type CodeSurfaceProps = {
   branchName?: string;
   worktreeLabel?: string;
   mentionBasePath?: string;
+  codeTheme: CodeThemePreset;
   onOpenBranches: () => void;
   onSelectTab: (tabId: string) => void;
   onAddTab: () => void;
@@ -633,6 +635,7 @@ export function CodeSurface({
   branchName,
   worktreeLabel,
   mentionBasePath,
+  codeTheme,
   onOpenBranches,
   onSelectTab,
   onAddTab,
@@ -797,12 +800,12 @@ export function CodeSurface({
   };
 
   if (!activeTab) {
-    return <section className="surface surface--code" />;
+    return <section className="surface surface--code" data-code-theme={codeTheme} />;
   }
 
   if (project.kind !== "local") {
     return (
-      <section className="surface surface--code">
+      <section className="surface surface--code" data-code-theme={codeTheme}>
         <div className="surface__header">
           <div className="surface__title">
             <Bot size={14} strokeWidth={1.9} />
@@ -836,7 +839,7 @@ export function CodeSurface({
   const sendLabel = isBusy || activeTab.pendingRequest ? "Queue follow-up" : "Send";
   const isEmpty = activeTab.messages.length === 0;
   return (
-    <section className="surface surface--code">
+    <section className="surface surface--code" data-code-theme={codeTheme}>
       <div className="surface__header">
         <div className="surface__title">
           <Bot size={14} strokeWidth={1.9} />

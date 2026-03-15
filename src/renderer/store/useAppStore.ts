@@ -176,6 +176,7 @@ const defaultAppSettings: AppSettings = {
   editorFontFamily: '"RecMono Nerd", "SF Mono", Menlo, Monaco, monospace',
   editorFontSize: 13,
   editorTheme: "spacecode-dark",
+  codeTheme: "spacecode-dark",
   terminalFontFamily:
     '"RecMono Nerd", "SF Mono", "MesloLGS NF", "JetBrainsMono Nerd Font", "Hack Nerd Font Mono", "Symbols Nerd Font Mono", Menlo, Monaco, monospace',
   terminalFontSize: 13,
@@ -195,6 +196,7 @@ function normalizeAppSettings(settings?: AppSettings): AppSettings {
     ...defaultAppSettings,
     ...settings,
     editorTheme: legacyEditorTheme ?? defaultAppSettings.editorTheme,
+    codeTheme: settings?.codeTheme ?? defaultAppSettings.codeTheme,
     remoteServers: settings?.remoteServers ?? defaultAppSettings.remoteServers
   };
 }

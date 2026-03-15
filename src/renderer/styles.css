@@ -86,30 +86,6 @@
   color: var(--color-text);
 }
 
-:root[data-theme="light"] .surface--code,
-:root[data-theme="light"] .code-shell,
-:root[data-theme="light"] .code-shell__header,
-:root[data-theme="light"] .code-launcher__composer,
-:root[data-theme="light"] .code-composer__frame,
-:root[data-theme="light"] .code-composer__input,
-:root[data-theme="light"] .code-launcher__input,
-:root[data-theme="light"] .code-message__code,
-:root[data-theme="light"] .code-request,
-:root[data-theme="light"] .code-message--tool,
-:root[data-theme="light"] .code-message--reasoning,
-:root[data-theme="light"] .code-message--system,
-:root[data-theme="light"] .code-message--status {
-  background: #ffffff;
-}
-
-:root[data-theme="light"] .code-launcher__composer,
-:root[data-theme="light"] .code-composer__frame {
-  border-color: rgba(15, 23, 42, 0.08);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.82) inset,
-    0 10px 26px rgba(15, 23, 42, 0.03);
-}
-
 * {
   box-sizing: border-box;
 }
@@ -2206,6 +2182,212 @@ button {
 .surface--code {
   padding: 0 10px 10px;
   gap: 8px;
+  color-scheme: dark;
+  --color-text: #f5f7fb;
+  --color-text-strong: rgba(245, 247, 251, 0.96);
+  --color-text-muted: rgba(245, 247, 251, 0.58);
+  --color-text-subtle: rgba(245, 247, 251, 0.5);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-soft: rgba(255, 255, 255, 0.06);
+  --color-border-faint: rgba(255, 255, 255, 0.04);
+  --color-surface: rgba(12, 18, 28, 0.92);
+  --color-surface-alt: rgba(13, 18, 27, 0.88);
+  --color-surface-soft: rgba(255, 255, 255, 0.04);
+  --color-surface-faint: rgba(255, 255, 255, 0.03);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-hover-soft: rgba(255, 255, 255, 0.05);
+  --color-accent: rgba(94, 165, 255, 0.88);
+  --color-accent-soft: rgba(47, 125, 244, 0.18);
+}
+
+.surface--code[data-code-theme="spacecode-dark"] {
+  color-scheme: dark;
+  --color-text: #f5f7fb;
+  --color-text-strong: rgba(245, 247, 251, 0.96);
+  --color-text-muted: rgba(245, 247, 251, 0.58);
+  --color-text-subtle: rgba(245, 247, 251, 0.5);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-soft: rgba(255, 255, 255, 0.06);
+  --color-border-faint: rgba(255, 255, 255, 0.04);
+  --color-surface: rgba(12, 18, 28, 0.92);
+  --color-surface-alt: rgba(13, 18, 27, 0.88);
+  --color-surface-soft: rgba(255, 255, 255, 0.04);
+  --color-surface-faint: rgba(255, 255, 255, 0.03);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-hover-soft: rgba(255, 255, 255, 0.05);
+  --color-accent: rgba(94, 165, 255, 0.88);
+  --color-accent-soft: rgba(47, 125, 244, 0.18);
+}
+
+.surface--code[data-code-theme="spacecode-light"] {
+  color-scheme: light;
+  --color-text: #162030;
+  --color-text-strong: #0f172a;
+  --color-text-muted: rgba(51, 65, 85, 0.7);
+  --color-text-subtle: rgba(51, 65, 85, 0.52);
+  --color-border: rgba(15, 23, 42, 0.09);
+  --color-border-soft: rgba(15, 23, 42, 0.065);
+  --color-border-faint: rgba(15, 23, 42, 0.05);
+  --color-surface: rgba(255, 255, 255, 0.98);
+  --color-surface-alt: rgba(248, 251, 255, 0.98);
+  --color-surface-soft: rgba(15, 23, 42, 0.035);
+  --color-surface-faint: rgba(15, 23, 42, 0.02);
+  --color-surface-hover: rgba(15, 23, 42, 0.06);
+  --color-surface-hover-soft: rgba(15, 23, 42, 0.04);
+  --color-accent: rgba(37, 99, 235, 0.8);
+  --color-accent-soft: rgba(37, 99, 235, 0.12);
+}
+
+.surface--code[data-code-theme="github-dark"] {
+  color-scheme: dark;
+  --color-text: #c9d1d9;
+  --color-text-strong: #f0f6fc;
+  --color-text-muted: rgba(201, 209, 217, 0.72);
+  --color-text-subtle: rgba(139, 148, 158, 0.82);
+  --color-border: rgba(240, 246, 252, 0.08);
+  --color-border-soft: rgba(240, 246, 252, 0.06);
+  --color-border-faint: rgba(240, 246, 252, 0.045);
+  --color-surface: rgba(13, 17, 23, 0.96);
+  --color-surface-alt: rgba(22, 27, 34, 0.98);
+  --color-surface-soft: rgba(110, 118, 129, 0.16);
+  --color-surface-faint: rgba(110, 118, 129, 0.1);
+  --color-surface-hover: rgba(177, 186, 196, 0.12);
+  --color-surface-hover-soft: rgba(177, 186, 196, 0.08);
+  --color-accent: rgba(88, 166, 255, 0.92);
+  --color-accent-soft: rgba(56, 139, 253, 0.16);
+}
+
+.surface--code[data-code-theme="github-light"] {
+  color-scheme: light;
+  --color-text: #1f2328;
+  --color-text-strong: #0b1f33;
+  --color-text-muted: rgba(87, 96, 106, 0.84);
+  --color-text-subtle: rgba(87, 96, 106, 0.64);
+  --color-border: rgba(31, 35, 40, 0.09);
+  --color-border-soft: rgba(31, 35, 40, 0.065);
+  --color-border-faint: rgba(31, 35, 40, 0.05);
+  --color-surface: rgba(255, 255, 255, 0.98);
+  --color-surface-alt: rgba(246, 248, 250, 0.98);
+  --color-surface-soft: rgba(208, 215, 222, 0.25);
+  --color-surface-faint: rgba(208, 215, 222, 0.16);
+  --color-surface-hover: rgba(208, 215, 222, 0.36);
+  --color-surface-hover-soft: rgba(208, 215, 222, 0.24);
+  --color-accent: rgba(9, 105, 218, 0.84);
+  --color-accent-soft: rgba(9, 105, 218, 0.12);
+}
+
+.surface--code[data-code-theme="dracula"] {
+  color-scheme: dark;
+  --color-text: #f8f8f2;
+  --color-text-strong: #ffffff;
+  --color-text-muted: rgba(248, 248, 242, 0.68);
+  --color-text-subtle: rgba(189, 147, 249, 0.72);
+  --color-border: rgba(248, 248, 242, 0.08);
+  --color-border-soft: rgba(248, 248, 242, 0.06);
+  --color-border-faint: rgba(248, 248, 242, 0.04);
+  --color-surface: rgba(40, 42, 54, 0.96);
+  --color-surface-alt: rgba(48, 51, 70, 0.98);
+  --color-surface-soft: rgba(255, 255, 255, 0.05);
+  --color-surface-faint: rgba(255, 255, 255, 0.03);
+  --color-surface-hover: rgba(255, 255, 255, 0.09);
+  --color-surface-hover-soft: rgba(255, 255, 255, 0.06);
+  --color-accent: rgba(255, 121, 198, 0.92);
+  --color-accent-soft: rgba(255, 121, 198, 0.16);
+}
+
+.surface--code[data-code-theme="nord"] {
+  color-scheme: dark;
+  --color-text: #e5e9f0;
+  --color-text-strong: #eceff4;
+  --color-text-muted: rgba(216, 222, 233, 0.72);
+  --color-text-subtle: rgba(129, 161, 193, 0.74);
+  --color-border: rgba(236, 239, 244, 0.08);
+  --color-border-soft: rgba(236, 239, 244, 0.06);
+  --color-border-faint: rgba(236, 239, 244, 0.045);
+  --color-surface: rgba(46, 52, 64, 0.96);
+  --color-surface-alt: rgba(59, 66, 82, 0.98);
+  --color-surface-soft: rgba(255, 255, 255, 0.045);
+  --color-surface-faint: rgba(255, 255, 255, 0.03);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-hover-soft: rgba(255, 255, 255, 0.05);
+  --color-accent: rgba(136, 192, 208, 0.9);
+  --color-accent-soft: rgba(136, 192, 208, 0.16);
+}
+
+.surface--code[data-code-theme="solarized-dark"] {
+  color-scheme: dark;
+  --color-text: #93a1a1;
+  --color-text-strong: #eee8d5;
+  --color-text-muted: rgba(147, 161, 161, 0.78);
+  --color-text-subtle: rgba(38, 139, 210, 0.74);
+  --color-border: rgba(238, 232, 213, 0.08);
+  --color-border-soft: rgba(238, 232, 213, 0.06);
+  --color-border-faint: rgba(238, 232, 213, 0.04);
+  --color-surface: rgba(0, 43, 54, 0.96);
+  --color-surface-alt: rgba(7, 54, 66, 0.98);
+  --color-surface-soft: rgba(238, 232, 213, 0.05);
+  --color-surface-faint: rgba(238, 232, 213, 0.03);
+  --color-surface-hover: rgba(238, 232, 213, 0.08);
+  --color-surface-hover-soft: rgba(238, 232, 213, 0.05);
+  --color-accent: rgba(38, 139, 210, 0.9);
+  --color-accent-soft: rgba(38, 139, 210, 0.16);
+}
+
+.surface--code[data-code-theme="solarized-light"] {
+  color-scheme: light;
+  --color-text: #586e75;
+  --color-text-strong: #073642;
+  --color-text-muted: rgba(88, 110, 117, 0.82);
+  --color-text-subtle: rgba(38, 139, 210, 0.7);
+  --color-border: rgba(7, 54, 66, 0.09);
+  --color-border-soft: rgba(7, 54, 66, 0.065);
+  --color-border-faint: rgba(7, 54, 66, 0.045);
+  --color-surface: rgba(253, 246, 227, 0.98);
+  --color-surface-alt: rgba(250, 243, 220, 0.98);
+  --color-surface-soft: rgba(7, 54, 66, 0.04);
+  --color-surface-faint: rgba(7, 54, 66, 0.025);
+  --color-surface-hover: rgba(7, 54, 66, 0.07);
+  --color-surface-hover-soft: rgba(7, 54, 66, 0.045);
+  --color-accent: rgba(38, 139, 210, 0.84);
+  --color-accent-soft: rgba(38, 139, 210, 0.12);
+}
+
+.surface--code[data-code-theme="gruvbox-dark"] {
+  color-scheme: dark;
+  --color-text: #ebdbb2;
+  --color-text-strong: #fbf1c7;
+  --color-text-muted: rgba(235, 219, 178, 0.72);
+  --color-text-subtle: rgba(250, 189, 47, 0.72);
+  --color-border: rgba(251, 241, 199, 0.08);
+  --color-border-soft: rgba(251, 241, 199, 0.06);
+  --color-border-faint: rgba(251, 241, 199, 0.045);
+  --color-surface: rgba(40, 40, 40, 0.96);
+  --color-surface-alt: rgba(50, 48, 47, 0.98);
+  --color-surface-soft: rgba(255, 255, 255, 0.045);
+  --color-surface-faint: rgba(255, 255, 255, 0.03);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-hover-soft: rgba(255, 255, 255, 0.05);
+  --color-accent: rgba(250, 189, 47, 0.9);
+  --color-accent-soft: rgba(250, 189, 47, 0.16);
+}
+
+.surface--code[data-code-theme="hc-black"] {
+  color-scheme: dark;
+  --color-text: #ffffff;
+  --color-text-strong: #ffffff;
+  --color-text-muted: rgba(255, 255, 255, 0.78);
+  --color-text-subtle: rgba(255, 255, 255, 0.62);
+  --color-border: rgba(255, 255, 255, 0.18);
+  --color-border-soft: rgba(255, 255, 255, 0.14);
+  --color-border-faint: rgba(255, 255, 255, 0.1);
+  --color-surface: rgba(0, 0, 0, 0.98);
+  --color-surface-alt: rgba(8, 8, 8, 0.99);
+  --color-surface-soft: rgba(255, 255, 255, 0.07);
+  --color-surface-faint: rgba(255, 255, 255, 0.04);
+  --color-surface-hover: rgba(255, 255, 255, 0.11);
+  --color-surface-hover-soft: rgba(255, 255, 255, 0.07);
+  --color-accent: rgba(255, 215, 0, 0.96);
+  --color-accent-soft: rgba(255, 215, 0, 0.2);
 }
 
 .surface--browser {

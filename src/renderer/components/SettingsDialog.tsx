@@ -3,6 +3,7 @@ import { Check, MonitorCog, MoonStar, Palette, Server, SunMedium, Type, X } from
 import type {
   AppSettings,
   AppTheme,
+  CodeThemePreset,
   EditorTheme,
   RemoteServerConfig,
   TerminalThemePreset
@@ -38,6 +39,19 @@ const terminalThemeOptions: Array<{ value: TerminalThemePreset; label: string; s
   { value: "solarized-dark", label: "Solarized Dark", swatches: ["#002b36", "#93a1a1", "#268bd2"] },
   { value: "solarized-light", label: "Solarized Light", swatches: ["#fdf6e3", "#586e75", "#268bd2"] },
   { value: "gruvbox-dark", label: "Gruvbox Dark", swatches: ["#282828", "#ebdbb2", "#fabd2f"] }
+];
+
+const codeThemeOptions: Array<{ value: CodeThemePreset; label: string; swatches: string[] }> = [
+  { value: "spacecode-dark", label: "SpaceCode Dark", swatches: ["#0b1220", "#dce8ff", "#3b82f6"] },
+  { value: "spacecode-light", label: "SpaceCode Light", swatches: ["#f8fbff", "#1f2937", "#2563eb"] },
+  { value: "github-dark", label: "GitHub Dark", swatches: ["#0d1117", "#c9d1d9", "#58a6ff"] },
+  { value: "github-light", label: "GitHub Light", swatches: ["#ffffff", "#1f2328", "#0969da"] },
+  { value: "dracula", label: "Dracula", swatches: ["#282a36", "#f8f8f2", "#ff79c6"] },
+  { value: "nord", label: "Nord", swatches: ["#2e3440", "#d8dee9", "#88c0d0"] },
+  { value: "solarized-dark", label: "Solarized Dark", swatches: ["#002b36", "#93a1a1", "#268bd2"] },
+  { value: "solarized-light", label: "Solarized Light", swatches: ["#fdf6e3", "#586e75", "#268bd2"] },
+  { value: "gruvbox-dark", label: "Gruvbox Dark", swatches: ["#282828", "#ebdbb2", "#fabd2f"] },
+  { value: "hc-black", label: "High Contrast", swatches: ["#000000", "#ffffff", "#ffff00"] }
 ];
 
 export function SettingsDialog({
@@ -161,6 +175,41 @@ export function SettingsDialog({
                       </span>
                       <span className="theme-card__label">{option.label}</span>
                       {option.value === settings.editorTheme ? (
+                        <span className="theme-card__selected">
+                          <Check size={12} strokeWidth={2.2} />
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </label>
+            </div>
+          </section>
+
+          <section className="settings-section">
+            <div className="settings-section__heading">
+              <Palette size={16} strokeWidth={1.9} />
+              <span>Code Surface</span>
+            </div>
+            <div className="settings-grid settings-grid--compact">
+              <label className="field">
+                <span>Theme</span>
+                <div className="theme-card-grid">
+                  {codeThemeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={option.value === settings.codeTheme ? "theme-card theme-card--active" : "theme-card"}
+                      onClick={() => onUpdateSettings({ codeTheme: option.value })}
+                      aria-pressed={option.value === settings.codeTheme}
+                    >
+                      <span className="theme-card__swatches">
+                        {option.swatches.map((swatch) => (
+                          <span key={swatch} className="theme-card__swatch" style={{ background: swatch }} />
+                        ))}
+                      </span>
+                      <span className="theme-card__label">{option.label}</span>
+                      {option.value === settings.codeTheme ? (
                         <span className="theme-card__selected">
                           <Check size={12} strokeWidth={2.2} />
                         </span>

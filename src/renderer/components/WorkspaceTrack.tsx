@@ -164,6 +164,7 @@ export function WorkspaceTrack({
                   branchName={workspace.git?.branch}
                   worktreeLabel={worktreeLabel}
                   mentionBasePath={workspace.selectedGitRepoPath ?? project.rootPath}
+                  codeTheme={appSettings.codeTheme}
                   onOpenBranches={() => {
                     if (!workspace.track.inspector.visible) {
                       onToggleInspector();
