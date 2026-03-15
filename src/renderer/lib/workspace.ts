@@ -74,9 +74,11 @@ export function createCodeTab(): CodeTab {
     selectedModel: undefined,
     reasoningEffort: "medium",
     runtimeMode: "full-access",
+    sessionRuntimeMode: undefined,
     interactionMode: "default",
     draft: "",
     attachments: [],
+    queuedTurns: [],
     messages: []
   };
 }

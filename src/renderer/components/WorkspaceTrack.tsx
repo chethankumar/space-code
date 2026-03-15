@@ -27,6 +27,9 @@ type WorkspaceTrackProps = {
   onSetCodeInteractionMode: (tabId: string, mode: ProjectWorkspace["codeTabs"][number]["interactionMode"]) => void;
   onAddCodeAttachment: (tabId: string, attachment: ProjectWorkspace["codeTabs"][number]["attachments"][number]) => void;
   onRemoveCodeAttachment: (tabId: string, attachmentId: string) => void;
+  onRemoveQueuedCodeTurn: (tabId: string, queuedTurnId: string) => void;
+  onClearQueuedCodeTurns: (tabId: string) => void;
+  onReplaceNextQueuedCodeTurn: (tabId: string) => void;
   onSubmitCodeTurn: (tabId: string) => Promise<void>;
   onInterruptCodeTurn: (tabId: string) => Promise<void>;
   onRespondToCodeRequest: (
@@ -69,6 +72,9 @@ export function WorkspaceTrack({
   onSetCodeInteractionMode,
   onAddCodeAttachment,
   onRemoveCodeAttachment,
+  onRemoveQueuedCodeTurn,
+  onClearQueuedCodeTurns,
+  onReplaceNextQueuedCodeTurn,
   onSubmitCodeTurn,
   onInterruptCodeTurn,
   onRespondToCodeRequest,
@@ -175,6 +181,9 @@ export function WorkspaceTrack({
                   onSetInteractionMode={onSetCodeInteractionMode}
                   onAddAttachment={onAddCodeAttachment}
                   onRemoveAttachment={onRemoveCodeAttachment}
+                  onRemoveQueuedTurn={onRemoveQueuedCodeTurn}
+                  onClearQueuedTurns={onClearQueuedCodeTurns}
+                  onReplaceNextQueuedTurn={onReplaceNextQueuedCodeTurn}
                   onSubmitTurn={onSubmitCodeTurn}
                   onInterruptTurn={onInterruptCodeTurn}
                   onRespondToRequest={onRespondToCodeRequest}

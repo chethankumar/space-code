@@ -102,6 +102,17 @@ export type CodeAttachment = {
   dataUrl?: string;
 };
 
+export type CodeQueuedTurn = {
+  id: string;
+  input?: string;
+  attachments: CodeAttachment[];
+  model?: string;
+  reasoningEffort: CodeReasoningEffort;
+  runtimeMode: CodeRuntimeMode;
+  interactionMode: CodeInteractionMode;
+  createdAt: string;
+};
+
 export type CodeTokenUsage = {
   totalTokens: number;
   inputTokens: number;
@@ -284,6 +295,7 @@ export type CodeTab = {
   threadId?: string;
   cwd?: string;
   sessionPath?: string;
+  sessionRuntimeMode?: CodeRuntimeMode;
   account?: CodeAccountInfo;
   availableModels: CodeModelOption[];
   selectedModel?: string;
@@ -292,6 +304,7 @@ export type CodeTab = {
   interactionMode: CodeInteractionMode;
   draft: string;
   attachments: CodeAttachment[];
+  queuedTurns: CodeQueuedTurn[];
   messages: CodeMessage[];
   pendingRequest?: CodePendingRequest;
   tokenUsage?: CodeTokenUsage;

@@ -153,7 +153,7 @@ export function TerminalSurface({
         [paneId]: {
           ...(current[paneId] ?? { buffer: "" }),
           sessionId: payload.sessionId,
-          buffer: `${current[paneId]?.buffer ?? ""}${payload.data}`.slice(-200_000),
+          buffer: `${current[paneId]?.buffer ?? ""}${payload.data}`.slice(-10_000_000),
           exitCode: current[paneId]?.exitCode
         }
       }));

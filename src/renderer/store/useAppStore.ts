@@ -115,6 +115,9 @@ type AppStore = {
   setCodeInteractionMode: (tabId: string, mode: CodeInteractionMode) => void;
   addCodeAttachment: (tabId: string, attachment: CodeAttachment) => void;
   removeCodeAttachment: (tabId: string, attachmentId: string) => void;
+  removeQueuedCodeTurn: (tabId: string, queuedTurnId: string) => void;
+  clearQueuedCodeTurns: (tabId: string) => void;
+  replaceNextQueuedCodeTurn: (tabId: string) => void;
   submitCodeTurn: (tabId: string) => Promise<void>;
   interruptCodeTurn: (tabId: string) => Promise<void>;
   respondToCodeRequest: (
@@ -248,6 +251,96 @@ function updateCodeTab(
   };
 }
 
+async function sendCodeTurnThroughSession(
+  project: ProjectRecord,
+  workspace: ProjectWorkspace,
+  tab: CodeTab,
+  tabId: string,
+  input: string,
+  attachments: CodeAttachment[]
+) {
+  const cwd = getSelectedGitRepoRoot(workspace, project);
+  if (!cwd) {
+    throw new Error("Missing project cwd.");
+  }
+
+  const previousThreadId = tab.threadId;
+  const needsSessionRestart =
+    !!tab.threadId &&
+    tab.status !== "closed" &&
+    ((tab.cwd && tab.cwd !== cwd) ||
+      (tab.sessionRuntimeMode !== undefined && tab.sessionRuntimeMode !== tab.runtimeMode));
+
+  if (needsSessionRestart && previousThreadId) {
+    await window.naeditor.stopCodeSession(tabId);
+    await window.naeditor.startCodeSession({
+      sessionId: tabId,
+      project,
+      cwd,
+      model: tab.selectedModel,
+      reasoningEffort: tab.reasoningEffort,
+      runtimeMode: tab.runtimeMode,
+      interactionMode: tab.interactionMode,
+      resumeThreadId: previousThreadId
+    });
+  }
+
+  if (!tab.threadId || tab.status === "closed") {
+    await window.naeditor.startCodeSession({
+      sessionId: tabId,
+      project,
+      cwd,
+      model: tab.selectedModel,
+      reasoningEffort: tab.reasoningEffort,
+      runtimeMode: tab.runtimeMode,
+      interactionMode: tab.interactionMode,
+      ...(previousThreadId ? { resumeThreadId: previousThreadId } : {})
+    });
+  }
+
+  try {
+    await window.naeditor.sendCodeTurn({
+      sessionId: tabId,
+      input,
+      attachments,
+      model: tab.selectedModel,
+      reasoningEffort: tab.reasoningEffort,
+      interactionMode: tab.interactionMode
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to send follow-up to Codex.";
+    const shouldRecoverSession =
+      previousThreadId &&
+      /(Unknown code session|missing a thread id|Session stopped|Timed out waiting|closed)/i.test(
+        message
+      );
+
+    if (!shouldRecoverSession) {
+      throw error;
+    }
+
+    await window.naeditor.startCodeSession({
+      sessionId: tabId,
+      project,
+      cwd,
+      model: tab.selectedModel,
+      reasoningEffort: tab.reasoningEffort,
+      runtimeMode: tab.runtimeMode,
+      interactionMode: tab.interactionMode,
+      resumeThreadId: previousThreadId
+    });
+
+    await window.naeditor.sendCodeTurn({
+      sessionId: tabId,
+      input,
+      attachments,
+      model: tab.selectedModel,
+      reasoningEffort: tab.reasoningEffort,
+      interactionMode: tab.interactionMode
+    });
+  }
+}
+
 async function syncWorkspaceGitDiffTabs(
   project: ProjectRecord,
   workspace: ProjectWorkspace,
@@ -338,9 +431,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
                   availableModels: tab.availableModels ?? [],
                   draft: tab.draft ?? "",
                   attachments: tab.attachments ?? [],
+                  queuedTurns: tab.queuedTurns ?? [],
                   messages: tab.messages ?? [],
                   reasoningEffort: tab.reasoningEffort ?? "medium",
                   runtimeMode: tab.runtimeMode ?? "full-access",
+                  sessionRuntimeMode: tab.sessionRuntimeMode,
                   interactionMode: tab.interactionMode ?? "default",
                   status: tab.status ?? "idle"
                 }))
@@ -1405,6 +1500,63 @@ export const useAppStore = create<AppStore>((set, get) => ({
       )
     );
   },
+  removeQueuedCodeTurn: (tabId, queuedTurnId) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          queuedTurns: tab.queuedTurns.filter((queuedTurn) => queuedTurn.id !== queuedTurnId)
+        }))
+      )
+    );
+    void get().persist();
+  },
+  clearQueuedCodeTurns: (tabId) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => ({
+          ...tab,
+          queuedTurns: []
+        }))
+      )
+    );
+    void get().persist();
+  },
+  replaceNextQueuedCodeTurn: (tabId) => {
+    set((state) =>
+      withWorkspace(state, (workspace) =>
+        updateCodeTab(workspace, tabId, (tab) => {
+          const input = tab.draft.trim();
+          if (!input && tab.attachments.length === 0) {
+            return tab;
+          }
+
+          const nextQueuedTurn = {
+            id: tab.queuedTurns[0]?.id ?? crypto.randomUUID(),
+            input: input || undefined,
+            attachments: tab.attachments,
+            model: tab.selectedModel,
+            reasoningEffort: tab.reasoningEffort,
+            runtimeMode: tab.runtimeMode,
+            interactionMode: tab.interactionMode,
+            createdAt: new Date().toISOString()
+          };
+
+          return {
+            ...tab,
+            draft: "",
+            attachments: [],
+            queuedTurns:
+              tab.queuedTurns.length > 0
+                ? [nextQueuedTurn, ...tab.queuedTurns.slice(1)]
+                : [nextQueuedTurn],
+            lastError: undefined
+          };
+        })
+      )
+    );
+    void get().persist();
+  },
   submitCodeTurn: async (tabId) => {
     let context = getCodeContext(get(), tabId);
     if (!context) {
@@ -1413,13 +1565,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
     const text = context.tab.draft.trim();
     const attachments = context.tab.attachments;
-    const previousThreadId = context.tab.threadId;
     if (!text && attachments.length === 0) {
-      return;
-    }
-
-    const cwd = getSelectedGitRepoRoot(context.workspace, context.project);
-    if (!cwd) {
       return;
     }
 
@@ -1431,17 +1577,36 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
     }
 
-    if (!context.tab.threadId || context.tab.status === "closed") {
-      await window.naeditor.startCodeSession({
-        sessionId: tabId,
-        project: context.project,
-        cwd,
+    const shouldQueue =
+      context.tab.status === "running" ||
+      context.tab.status === "waiting" ||
+      Boolean(context.tab.pendingRequest);
+
+    if (shouldQueue) {
+      const queuedTurn = {
+        id: crypto.randomUUID(),
+        input: text || undefined,
+        attachments,
         model: context.tab.selectedModel,
         reasoningEffort: context.tab.reasoningEffort,
         runtimeMode: context.tab.runtimeMode,
         interactionMode: context.tab.interactionMode,
-        ...(previousThreadId ? { resumeThreadId: previousThreadId } : {})
-      });
+        createdAt: new Date().toISOString()
+      };
+
+      set((state) =>
+        withWorkspace(state, (workspace) =>
+          updateCodeTab(workspace, tabId, (tab) => ({
+            ...tab,
+            draft: "",
+            attachments: [],
+            queuedTurns: [...tab.queuedTurns, queuedTurn],
+            lastError: undefined
+          }))
+        )
+      );
+      void get().persist();
+      return;
     }
 
     set((state) =>
@@ -1456,55 +1621,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
     );
 
     try {
-      await window.naeditor.sendCodeTurn({
-        sessionId: tabId,
-        input: text,
-        attachments,
-        model: context.tab.selectedModel,
-        reasoningEffort: context.tab.reasoningEffort,
-        interactionMode: context.tab.interactionMode
-      });
+      await sendCodeTurnThroughSession(
+        context.project,
+        context.workspace,
+        context.tab,
+        tabId,
+        text,
+        attachments
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to send follow-up to Codex.";
-      const shouldRecoverSession =
-        previousThreadId &&
-        /(Unknown code session|missing a thread id|Session stopped|Timed out waiting|closed)/i.test(
-          message
-        );
-
-      if (shouldRecoverSession) {
-        await window.naeditor.startCodeSession({
-          sessionId: tabId,
-          project: context.project,
-          cwd,
-          model: context.tab.selectedModel,
-          reasoningEffort: context.tab.reasoningEffort,
-          runtimeMode: context.tab.runtimeMode,
-          interactionMode: context.tab.interactionMode,
-          resumeThreadId: previousThreadId
-        });
-
-        await window.naeditor.sendCodeTurn({
-          sessionId: tabId,
-          input: text,
-          attachments,
-          model: context.tab.selectedModel,
-          reasoningEffort: context.tab.reasoningEffort,
-          interactionMode: context.tab.interactionMode
-        });
-      } else {
-        set((state) =>
-          withWorkspace(state, (workspace) =>
-            updateCodeTab(workspace, tabId, (tab) => ({
-              ...tab,
-              draft: text,
-              attachments,
-              lastError: message
-            }))
-          )
-        );
-        throw error;
-      }
+      set((state) =>
+        withWorkspace(state, (workspace) =>
+          updateCodeTab(workspace, tabId, (tab) => ({
+            ...tab,
+            draft: text,
+            attachments,
+            lastError: message
+          }))
+        )
+      );
+      throw error;
     }
     void get().persist();
   },
@@ -1550,6 +1687,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
               threadId: event.threadId,
               cwd: event.cwd,
               sessionPath: event.sessionPath,
+              sessionRuntimeMode: tab.runtimeMode,
               account: event.account,
               availableModels: event.models,
               selectedModel:
@@ -1562,6 +1700,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
             return {
               ...tab,
               status: event.status,
+              ...(event.status === "closed" ? { sessionRuntimeMode: undefined } : {}),
               ...(event.threadId ? { threadId: event.threadId } : {}),
               ...(event.message && event.status === "error"
                 ? { lastError: event.message }
@@ -1695,6 +1834,61 @@ export const useAppStore = create<AppStore>((set, get) => ({
         }
       };
     });
+
+    if (
+      event.type === "turn.completed" ||
+      (event.type === "session.state" && event.status === "ready") ||
+      event.type === "request.resolved"
+    ) {
+      const nextContext = getCodeContext(get(), event.sessionId);
+      if (
+        nextContext?.tab.queuedTurns.length &&
+        nextContext.tab.status === "ready" &&
+        !nextContext.tab.pendingRequest
+      ) {
+        const [queuedTurn, ...remainingQueuedTurns] = nextContext.tab.queuedTurns;
+        if (!queuedTurn) {
+          return;
+        }
+        set((state) =>
+          withWorkspace(state, (workspace) =>
+            updateCodeTab(workspace, event.sessionId, (tab) => ({
+              ...tab,
+              queuedTurns: remainingQueuedTurns,
+              lastError: undefined
+            }))
+          )
+        );
+
+        void sendCodeTurnThroughSession(
+          nextContext.project,
+          nextContext.workspace,
+          {
+            ...nextContext.tab,
+            selectedModel: queuedTurn.model,
+            reasoningEffort: queuedTurn.reasoningEffort,
+            runtimeMode: queuedTurn.runtimeMode,
+            interactionMode: queuedTurn.interactionMode,
+            queuedTurns: remainingQueuedTurns
+          },
+          event.sessionId,
+          queuedTurn.input ?? "",
+          queuedTurn.attachments
+        ).catch((error) => {
+          const message =
+            error instanceof Error ? error.message : "Failed to send queued follow-up to Codex.";
+          set((state) =>
+            withWorkspace(state, (workspace) =>
+              updateCodeTab(workspace, event.sessionId, (tab) => ({
+                ...tab,
+                queuedTurns: [queuedTurn, ...tab.queuedTurns],
+                lastError: message
+              }))
+            )
+          );
+        });
+      }
+    }
   },
   setBrowserUrl: (url) => {
     set((state) =>

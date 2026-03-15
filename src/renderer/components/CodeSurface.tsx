@@ -16,6 +16,7 @@ import {
 import type {
   CodeAttachment,
   CodeInteractionMode,
+  CodeQueuedTurn,
   CodeReasoningEffort,
   CodeRuntimeMode,
   CodeTab,
@@ -41,6 +42,9 @@ type CodeSurfaceProps = {
   onSetInteractionMode: (tabId: string, mode: CodeInteractionMode) => void;
   onAddAttachment: (tabId: string, attachment: CodeAttachment) => void;
   onRemoveAttachment: (tabId: string, attachmentId: string) => void;
+  onRemoveQueuedTurn: (tabId: string, queuedTurnId: string) => void;
+  onClearQueuedTurns: (tabId: string) => void;
+  onReplaceNextQueuedTurn: (tabId: string) => void;
   onSubmitTurn: (tabId: string) => Promise<void>;
   onInterruptTurn: (tabId: string) => Promise<void>;
   onRespondToRequest: (
@@ -58,6 +62,8 @@ type CodeComposerProps = {
   menuOpen: boolean;
   isBusy: boolean;
   canSend: boolean;
+  sendLabel: string;
+  queueCount: number;
   selectedModel?: CodeTab["availableModels"][number];
   branchName?: string;
   worktreeLabel?: string;
@@ -76,6 +82,7 @@ type CodeComposerProps = {
   onSubmit: () => void;
   onInterrupt: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
+  onReplaceNextQueuedTurn: () => void;
 };
 
 function normalizeSlashPath(value: string) {
@@ -319,6 +326,20 @@ function formatElapsedMs(value?: number) {
   return remainderSeconds > 0 ? `${minutes}m ${remainderSeconds}s` : `${minutes}m`;
 }
 
+function formatQueuedTurnSummary(queuedTurn: CodeQueuedTurn) {
+  const text = queuedTurn.input?.trim();
+  if (text) {
+    return text;
+  }
+  if (queuedTurn.attachments.length === 1) {
+    return queuedTurn.attachments[0]?.name ?? "1 attachment";
+  }
+  if (queuedTurn.attachments.length > 1) {
+    return `${queuedTurn.attachments.length} attachments`;
+  }
+  return "Queued follow-up";
+}
+
 function CodeComposer({
   tab,
   composerRef,
@@ -327,6 +348,8 @@ function CodeComposer({
   menuOpen,
   isBusy,
   canSend,
+  sendLabel,
+  queueCount,
   selectedModel,
   branchName,
   worktreeLabel,
@@ -344,7 +367,8 @@ function CodeComposer({
   onOpenBranches,
   onSubmit,
   onInterrupt,
-  onRemoveAttachment
+  onRemoveAttachment,
+  onReplaceNextQueuedTurn
 }: CodeComposerProps) {
   return (
     <div className="code-composer">
@@ -458,6 +482,23 @@ function CodeComposer({
                 <Gauge size={15} strokeWidth={1.9} />
                 <span>{contextWindowUsage !== undefined ? `${contextWindowUsage}%` : "Ctx"}</span>
               </span>
+              {queueCount > 0 ? (
+                <>
+                  <span className="code-launcher__select code-launcher__select--context" title={`${queueCount} queued follow-up${queueCount === 1 ? "" : "s"}`}>
+                    <span>{`Queued ${queueCount}`}</span>
+                  </span>
+                  {canSend ? (
+                    <button
+                      type="button"
+                      className="code-launcher__queue-action"
+                      onClick={onReplaceNextQueuedTurn}
+                      title="Replace the next queued follow-up"
+                    >
+                      Replace next
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
               {isBusy ? (
                 <button
                   className="code-action-button code-action-button--icon"
@@ -467,7 +508,7 @@ function CodeComposer({
                   <Square size={13} strokeWidth={2} />
                 </button>
               ) : null}
-              <button className="code-launcher__send" disabled={!canSend} onClick={onSubmit}>
+              <button className="code-launcher__send" disabled={!canSend} onClick={onSubmit} title={sendLabel}>
                 {isBusy ? (
                   <LoaderCircle size={18} className="spin" strokeWidth={2.1} />
                 ) : (
@@ -551,6 +592,16 @@ function CodeComposer({
                       <Gauge size={14} strokeWidth={1.9} />
                       <span>{contextWindowUsage !== undefined ? `${contextWindowUsage}% context used` : "Context usage pending"}</span>
                     </div>
+                    {queueCount > 0 ? (
+                      <>
+                        <div className="code-overflow__meta">{`${queueCount} queued follow-up${queueCount === 1 ? "" : "s"}`}</div>
+                        {canSend ? (
+                          <button type="button" className="code-overflow__button" onClick={onReplaceNextQueuedTurn}>
+                            <span>Replace next queued follow-up</span>
+                          </button>
+                        ) : null}
+                      </>
+                    ) : null}
                     {showWorktreeContext ? <div className="code-overflow__meta">{worktreeLabel}</div> : null}
                   </div>
                 ) : null}
@@ -560,7 +611,7 @@ function CodeComposer({
                   <Square size={13} strokeWidth={2} />
                 </button>
               ) : null}
-              <button className="code-send-button" disabled={!canSend} onClick={onSubmit}>
+              <button className="code-send-button" disabled={!canSend} onClick={onSubmit} title={sendLabel}>
                 {isBusy ? (
                   <LoaderCircle size={14} className="spin" strokeWidth={2} />
                 ) : (
@@ -594,6 +645,9 @@ export function CodeSurface({
   onSetInteractionMode,
   onAddAttachment,
   onRemoveAttachment,
+  onRemoveQueuedTurn,
+  onClearQueuedTurns,
+  onReplaceNextQueuedTurn,
   onSubmitTurn,
   onInterruptTurn,
   onRespondToRequest
@@ -688,6 +742,28 @@ export function CodeSurface({
     !!worktreeLabel &&
     worktreeLabel.trim().length > 0 &&
     worktreeLabel !== project.name;
+  const threadItems = useMemo(() => {
+    const source = activeTab?.messages.filter((message) => message.kind !== "reasoning") ?? [];
+    const grouped: Array<
+      | { kind: "command-group"; messages: typeof source }
+      | { kind: "message"; message: (typeof source)[number] }
+    > = [];
+
+    for (const message of source) {
+      if (message.kind === "tool") {
+        const previous = grouped[grouped.length - 1];
+        if (previous?.kind === "command-group") {
+          previous.messages.push(message);
+        } else {
+          grouped.push({ kind: "command-group", messages: [message] });
+        }
+        continue;
+      }
+      grouped.push({ kind: "message", message });
+    }
+
+    return grouped;
+  }, [activeTab?.messages]);
 
   const handlePickAttachment = async (file: File) => {
     const path = (file as File & { path?: string }).path ?? file.name;
@@ -756,30 +832,9 @@ export function CodeSurface({
   }
 
   const isBusy = activeTab.status === "connecting" || activeTab.status === "running" || activeTab.status === "waiting";
-  const canSend = (activeTab.draft.trim().length > 0 || activeTab.attachments.length > 0) && !isBusy;
+  const canSend = activeTab.draft.trim().length > 0 || activeTab.attachments.length > 0;
+  const sendLabel = isBusy || activeTab.pendingRequest ? "Queue follow-up" : "Send";
   const isEmpty = activeTab.messages.length === 0;
-  const threadItems = useMemo(() => {
-    const source = activeTab.messages.filter((message) => message.kind !== "reasoning");
-    const grouped: Array<
-      | { kind: "command-group"; messages: typeof source }
-      | { kind: "message"; message: (typeof source)[number] }
-    > = [];
-
-    for (const message of source) {
-      if (message.kind === "tool") {
-        const previous = grouped[grouped.length - 1];
-        if (previous?.kind === "command-group") {
-          previous.messages.push(message);
-        } else {
-          grouped.push({ kind: "command-group", messages: [message] });
-        }
-        continue;
-      }
-      grouped.push({ kind: "message", message });
-    }
-
-    return grouped;
-  }, [activeTab.messages]);
   return (
     <section className="surface surface--code">
       <div className="surface__header">
@@ -1034,6 +1089,42 @@ export function CodeSurface({
               )}
             </div>
           ) : null}
+          {activeTab.queuedTurns.length > 0 ? (
+            <div className="code-queued-turns">
+              <div className="code-queued-turns__header">
+                <div className="code-queued-turns__title">Queued follow-ups</div>
+                <button
+                  type="button"
+                  className="code-queued-turns__clear"
+                  onClick={() => onClearQueuedTurns(activeTab.id)}
+                >
+                  Clear queue
+                </button>
+              </div>
+              <div className="code-queued-turns__list">
+                {activeTab.queuedTurns.map((queuedTurn, index) => (
+                  <div key={queuedTurn.id} className="code-queued-turn">
+                    <div className="code-queued-turn__meta">
+                      <span className="code-queued-turn__label">
+                        {index === 0 ? "Next up" : `Queued ${index + 1}`}
+                      </span>
+                    </div>
+                    <div className="code-queued-turn__body">
+                      <div className="code-queued-turn__text">{formatQueuedTurnSummary(queuedTurn)}</div>
+                      <button
+                        type="button"
+                        className="code-queued-turn__remove"
+                        title="Remove queued follow-up"
+                        onClick={() => onRemoveQueuedTurn(activeTab.id, queuedTurn.id)}
+                      >
+                        <X size={12} strokeWidth={2} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           </div>
         </div>
 
@@ -1045,6 +1136,8 @@ export function CodeSurface({
           menuOpen={composerMenuOpen}
           isBusy={isBusy}
           canSend={canSend}
+          sendLabel={sendLabel}
+          queueCount={activeTab.queuedTurns.length}
           selectedModel={selectedModel}
           branchName={branchName}
           worktreeLabel={worktreeLabel}
@@ -1063,6 +1156,7 @@ export function CodeSurface({
           onSubmit={() => void onSubmitTurn(activeTab.id)}
           onInterrupt={() => void onInterruptTurn(activeTab.id)}
           onRemoveAttachment={(attachmentId) => onRemoveAttachment(activeTab.id, attachmentId)}
+          onReplaceNextQueuedTurn={() => onReplaceNextQueuedTurn(activeTab.id)}
         />
       </div>
     </section>

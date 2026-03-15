@@ -25,6 +25,28 @@ export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth
     }
   }, [track?.activeSurface]);
 
+  const total = track ? getTrackWidth(track) : 1;
+  const order = useMemo<SurfaceId[]>(
+    () => (track ? normalizeSurfaceOrder(track.order) : ["editor", "code", "terminal", "browser"]),
+    [track]
+  );
+  const selected = selectedSurface;
+  const selectedIndex = order.indexOf(selected);
+  const segmentWidths = useMemo(
+    () =>
+      track
+        ? (Object.fromEntries(
+            order.map((surface) => [surface, `${(snapWidthToRatio[track.widths[surface]] / total) * 100}%`])
+          ) as Record<SurfaceId, string>)
+        : ({
+            editor: "25%",
+            code: "25%",
+            terminal: "25%",
+            browser: "25%"
+          } as Record<SurfaceId, string>),
+    [order, total, track]
+  );
+
   if (!project || !track) {
     return (
       <header className="top-bar">
@@ -39,19 +61,7 @@ export function TopBar({ project, track, git, onAnchorSurface, onSetSurfaceWidth
     );
   }
 
-  const total = getTrackWidth(track);
-  const order = normalizeSurfaceOrder(track.order);
-  const selected = selectedSurface;
   const projectLocation = project.kind === "remote" ? `${project.host}:${project.rootPath}` : project.rootPath;
-  const selectedIndex = order.indexOf(selected);
-
-  const segmentWidths = useMemo(
-    () =>
-      Object.fromEntries(
-        order.map((surface) => [surface, `${(snapWidthToRatio[track.widths[surface]] / total) * 100}%`])
-      ) as Record<SurfaceId, string>,
-    [order, total, track.widths]
-  );
 
   return (
     <header className="top-bar">

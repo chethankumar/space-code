@@ -9,10 +9,6 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { useAppStore } from "./store/useAppStore";
 
 export function App() {
-  if (!window.naeditor) {
-    return <div className="app-loading">Loading SpaceCode bridge…</div>;
-  }
-
   const [showRemoteProjectModal, setShowRemoteProjectModal] = useState(false);
   const [browserDevtoolsRequestKey, setBrowserDevtoolsRequestKey] = useState(0);
   const hydrated = useAppStore((state) => state.hydrated);
@@ -72,6 +68,9 @@ export function App() {
   const setCodeInteractionMode = useAppStore((state) => state.setCodeInteractionMode);
   const addCodeAttachment = useAppStore((state) => state.addCodeAttachment);
   const removeCodeAttachment = useAppStore((state) => state.removeCodeAttachment);
+  const removeQueuedCodeTurn = useAppStore((state) => state.removeQueuedCodeTurn);
+  const clearQueuedCodeTurns = useAppStore((state) => state.clearQueuedCodeTurns);
+  const replaceNextQueuedCodeTurn = useAppStore((state) => state.replaceNextQueuedCodeTurn);
   const submitCodeTurn = useAppStore((state) => state.submitCodeTurn);
   const interruptCodeTurn = useAppStore((state) => state.interruptCodeTurn);
   const respondToCodeRequest = useAppStore((state) => state.respondToCodeRequest);
@@ -114,6 +113,9 @@ export function App() {
   }, [hydrate]);
 
   useEffect(() => {
+    if (!window.naeditor) {
+      return;
+    }
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const applyTheme = () => {
       const resolvedTheme = appSettings.theme === "auto" ? (mediaQuery.matches ? "dark" : "light") : appSettings.theme;
@@ -140,14 +142,25 @@ export function App() {
     activeProject?.rootPath ? directoryCache[`${activeProject.id}:${activeProject.rootPath}`] ?? [] : [];
 
   useEffect(() => {
+    if (!window.naeditor) {
+      return;
+    }
     if (activeProject?.rootPath) {
       void refreshGit(activeProject.id);
     }
   }, [activeProject?.id, activeProject?.rootPath, refreshGit]);
 
-  useEffect(() => window.naeditor.onCodeEvent(handleCodeEvent), [handleCodeEvent]);
+  useEffect(() => {
+    if (!window.naeditor) {
+      return;
+    }
+    return window.naeditor.onCodeEvent(handleCodeEvent);
+  }, [handleCodeEvent]);
 
   useEffect(() => {
+    if (!window.naeditor) {
+      return;
+    }
     const handleCommand = (command: AppCommand) => {
       switch (command) {
         case "open-project":
@@ -282,6 +295,9 @@ export function App() {
   ]);
 
   useEffect(() => {
+    if (!window.naeditor) {
+      return;
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "w") {
         event.preventDefault();
@@ -332,6 +348,10 @@ export function App() {
     settingsDialogOpen,
     showRemoteProjectModal
   ]);
+
+  if (!window.naeditor) {
+    return <div className="app-loading">Loading SpaceCode bridge…</div>;
+  }
 
   if (!hydrated || loading) {
     return <div className="app-loading">Loading SpaceCode…</div>;
@@ -423,6 +443,9 @@ export function App() {
             onSetCodeInteractionMode={setCodeInteractionMode}
             onAddCodeAttachment={addCodeAttachment}
             onRemoveCodeAttachment={removeCodeAttachment}
+            onRemoveQueuedCodeTurn={removeQueuedCodeTurn}
+            onClearQueuedCodeTurns={clearQueuedCodeTurns}
+            onReplaceNextQueuedCodeTurn={replaceNextQueuedCodeTurn}
             onSubmitCodeTurn={submitCodeTurn}
             onInterruptCodeTurn={interruptCodeTurn}
             onRespondToCodeRequest={respondToCodeRequest}

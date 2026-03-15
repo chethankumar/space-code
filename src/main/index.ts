@@ -201,7 +201,7 @@ function ensureTerminalHost() {
     if (typed.type === "terminal-data") {
       const session = terminalSessions.get(typed.payload.sessionId);
       if (session) {
-        session.buffer = `${session.buffer}${typed.payload.data}`.slice(-200_000);
+        session.buffer = `${session.buffer}${typed.payload.data}`.slice(-10_000_000);
       }
       mainWindow?.webContents.send("terminal:data", typed.payload);
       return;
