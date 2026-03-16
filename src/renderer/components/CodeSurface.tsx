@@ -285,25 +285,38 @@ function formatMessageTime(value?: string) {
     return null;
   }
   const now = new Date();
-  const sameDay = date.toDateString() === now.toDateString();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
 
-  if (sameDay) {
-    return `Today at ${new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit"
-    }).format(date)}`;
+  // Just now (< 10 seconds)
+  if (diffSeconds < 10) {
+    return "Just now";
   }
 
-  if (isYesterday) {
-    return `Yesterday at ${new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit"
-    }).format(date)}`;
+  // Seconds ago (< 60 seconds)
+  if (diffSeconds < 60) {
+    return `${diffSeconds}s ago`;
   }
 
+  // Minutes ago (< 60 minutes)
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  // Hours ago (< 24 hours)
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  // Days ago (< 7 days)
+  if (diffDays < 7) {
+    return `${diffDays}d ago`;
+  }
+
+  // Older: use date format
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
@@ -476,8 +489,8 @@ function CodeComposer({
               <span
                 className="code-launcher__select code-launcher__select--context"
                 title={
-                  contextWindowUsage !== undefined
-                    ? `Context window used: ${contextWindowUsage}%${contextWindowLabel ? ` (${contextWindowLabel})` : ""}`
+                  contextWindowUsage !== undefined && contextWindowLabel
+                    ? `Context: ${contextWindowLabel} (${contextWindowUsage}% used)`
                     : "Context window usage will appear once Codex reports token usage"
                 }
               >
@@ -734,12 +747,12 @@ export function CodeSurface({
     [activeTab]
   );
   const contextWindowUsage =
-    activeTab.tokenUsage?.modelContextWindow && activeTab.tokenUsage.modelContextWindow > 0
+    activeTab.tokenUsage?.modelContextWindow && activeTab.tokenUsage.modelContextWindow > 0 && activeTab.tokenUsage.totalTokens > 0
       ? Math.min(100, Math.max(0, Math.round((activeTab.tokenUsage.totalTokens / activeTab.tokenUsage.modelContextWindow) * 100)))
       : undefined;
   const contextWindowLabel =
     activeTab.tokenUsage?.modelContextWindow && activeTab.tokenUsage.modelContextWindow > 0
-      ? `${activeTab.tokenUsage.totalTokens.toLocaleString()} / ${activeTab.tokenUsage.modelContextWindow.toLocaleString()}`
+      ? `${activeTab.tokenUsage.totalTokens.toLocaleString()} / ${activeTab.tokenUsage.modelContextWindow.toLocaleString()} tokens`
       : undefined;
   const showWorktreeContext =
     !!worktreeLabel &&
@@ -747,22 +760,93 @@ export function CodeSurface({
     worktreeLabel !== project.name;
   const threadItems = useMemo(() => {
     const source = activeTab?.messages.filter((message) => message.kind !== "reasoning") ?? [];
+    
+    // First, identify turns (user message + all responses until next user message)
+    const turns: Array<{ messages: typeof source; isLastTurn: boolean }> = [];
+    let currentTurn: typeof source = [];
+    
+    for (let i = 0; i < source.length; i++) {
+      const message = source[i];
+      
+      if (message.kind === "user") {
+        // Start new turn
+        if (currentTurn.length > 0) {
+          turns.push({ messages: currentTurn, isLastTurn: false });
+        }
+        currentTurn = [message];
+      } else {
+        // Add to current turn
+        currentTurn.push(message);
+      }
+    }
+    
+    // Add the last turn
+    if (currentTurn.length > 0) {
+      turns.push({ messages: currentTurn, isLastTurn: true });
+    }
+    
+    // Mark the last turn
+    if (turns.length > 0) {
+      turns[turns.length - 1].isLastTurn = true;
+      if (turns.length > 1) {
+        turns[turns.length - 2].isLastTurn = false;
+      }
+    }
+    
+    // Now group messages within each turn
     const grouped: Array<
-      | { kind: "command-group"; messages: typeof source }
-      | { kind: "message"; message: (typeof source)[number] }
+      | { kind: "command-group"; messages: typeof source; index: number; isInLastTurn: boolean }
+      | { kind: "message"; message: (typeof source)[number]; index: number; isInLastTurn: boolean }
+      | { kind: "separator"; index: number }
     > = [];
 
-    for (const message of source) {
-      if (message.kind === "tool") {
-        const previous = grouped[grouped.length - 1];
-        if (previous?.kind === "command-group") {
-          previous.messages.push(message);
-        } else {
-          grouped.push({ kind: "command-group", messages: [message] });
-        }
-        continue;
+    // Find the last assistant message index globally
+    let lastAssistantIndex = -1;
+    for (let i = source.length - 1; i >= 0; i--) {
+      if (source[i].kind === "assistant") {
+        lastAssistantIndex = i;
+        break;
       }
-      grouped.push({ kind: "message", message });
+    }
+
+    let currentIndex = 0;
+    let globalMessageIndex = 0;
+    
+    for (const turn of turns) {
+      for (let i = 0; i < turn.messages.length; i++) {
+        const message = turn.messages[i];
+        
+        // Add separator BEFORE the last assistant message (if it's in this turn)
+        if (message.kind === "assistant" && globalMessageIndex === lastAssistantIndex && globalMessageIndex > 0) {
+          grouped.push({ kind: "separator", index: currentIndex });
+          currentIndex++;
+        }
+        
+        if (message.kind === "tool") {
+          const previous = grouped[grouped.length - 1];
+          if (previous?.kind === "command-group") {
+            previous.messages.push(message);
+          } else {
+            grouped.push({ 
+              kind: "command-group", 
+              messages: [message], 
+              index: currentIndex,
+              isInLastTurn: turn.isLastTurn
+            });
+          }
+          globalMessageIndex++;
+          continue;
+        }
+        
+        grouped.push({ 
+          kind: "message", 
+          message, 
+          index: currentIndex,
+          isInLastTurn: turn.isLastTurn
+        });
+        currentIndex++;
+        globalMessageIndex++;
+      }
     }
 
     return grouped;
@@ -900,115 +984,142 @@ export function CodeSurface({
             </div>
           ) : null}
 
-          {threadItems.map((item) => (
-            item.kind === "command-group" ? (
-              <div
-                key={item.messages.map((message) => message.id).join(":")}
-                className={`code-command-group${
-                  item.messages.some((message) => message.streaming) ? " code-command-group--streaming" : ""
-                }`}
-              >
-                {item.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`code-command-block${message.streaming ? " code-command-block--streaming" : ""}`}
-                  >
-                    <div className="code-command-block__icon">{">_"}</div>
-                    <div className="code-command-block__content">
-                      <span className="code-command-block__label">Command run -</span>
-                      <span className="code-command-block__text">{message.text || "Running command…"}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : item.message.kind === "assistant" || item.message.kind === "user" ? (
-              <div
-                key={item.message.id}
-                className={`code-message code-message--${item.message.kind} ${
-                  item.message.streaming ? "code-message--streaming" : ""
-                }`}
-              >
-                {item.message.kind === "assistant" ? (
-                  <div className="code-message__header">
-                    <div className="code-message__role">
-                      <span className="code-message__avatar">{getMessageBadge(item.message.kind)}</span>
-                      <span className="code-message__title">{getMessageTitle(item.message.kind, item.message.title)}</span>
-                    </div>
-                    {item.message.metadata ? (
-                      <div className="code-message__metadata">
-                        {Object.values(item.message.metadata).map((value) => (
-                          <span key={value} className="code-message__meta-chip">
-                            {value}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                <div className="code-message__body">
-                  {item.message.text
-                    ? renderMessageBody(item.message.text)
-                    : item.message.streaming
-                      ? "…"
-                      : null}
+          {threadItems.map((item, itemIndex) => {
+            if (item.kind === "separator") {
+              return (
+                <div key={`sep-${item.index}`} className="code-message-separator">
+                  <div className="code-message-separator__line" />
                 </div>
-                {item.message.kind === "assistant" &&
-                (item.message.completedAt || item.message.elapsedMs !== undefined || item.message.changedFiles?.length) ? (
-                  <div className="code-message__footer">
-                    <div className="code-message__foot-meta">
-                      {formatMessageTime(item.message.completedAt ?? item.message.createdAt) ? (
-                        <span>
-                          Completed {formatMessageTime(item.message.completedAt ?? item.message.createdAt)}
-                        </span>
-                      ) : null}
-                      {formatElapsedMs(item.message.elapsedMs) ? (
-                        <span>{formatElapsedMs(item.message.elapsedMs)}</span>
-                      ) : null}
+              );
+            }
+            
+            if (item.kind === "command-group") {
+              const isStreaming = item.messages.some((message) => message.streaming);
+              return (
+                <details
+                  key={item.messages.map((message) => message.id).join(":")}
+                  className={`code-command-group${isStreaming ? " code-command-group--streaming" : ""}`}
+                  open={isStreaming || item.isInLastTurn}
+                >
+                  <summary className="code-command-group__summary">
+                    <div className="code-command-group__summary-content">
+                      <div className="code-command-block__icon">{">_"}</div>
+                      <span className="code-command-group__summary-text">
+                        {item.messages.length === 1 
+                          ? "Command run" 
+                          : `${item.messages.length} commands run`}
+                      </span>
                     </div>
-                    {item.message.changedFiles?.length ? (
-                      <div className="code-message__changed-files">
-                        {item.message.changedFiles.map((file) => (
-                          <span key={`${item.message.id}-${file.path}`} className="code-message__changed-file">
-                            <span className={`code-message__changed-file-status code-message__changed-file-status--${file.status}`}>
-                              {file.status === "modified"
-                                ? "M"
-                                : file.status === "added"
-                                  ? "A"
-                                  : file.status === "deleted"
-                                    ? "D"
-                                    : file.status === "renamed"
-                                      ? "R"
-                                      : file.status === "copied"
-                                        ? "C"
-                                        : file.status === "untracked"
-                                          ? "U"
-                                          : "•"}
-                            </span>
-                            <span className="code-message__changed-file-path">{file.path}</span>
-                          </span>
-                        ))}
+                    <ChevronDown size={14} strokeWidth={2} className="code-message__summary-chevron" />
+                  </summary>
+                  <div className="code-command-group__content">
+                    {item.messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`code-command-block${message.streaming ? " code-command-block--streaming" : ""}`}
+                      >
+                        <div className="code-command-block__icon">{">_"}</div>
+                        <div className="code-command-block__content">
+                          {message.text && message.text.trim() ? (
+                            <span className="code-command-block__text">{message.text}</span>
+                          ) : message.title ? (
+                            <>
+                              <span className="code-command-block__label">{message.title}</span>
+                              {message.metadata?.output && (
+                                <span className="code-command-block__text"> - {message.metadata.output}</span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <span className="code-command-block__label">Command run</span>
+                              <span className="code-command-block__text">{message.streaming ? "Running…" : "Completed"}</span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    ) : null}
+                    ))}
                   </div>
-                ) : null}
-                {item.message.kind === "user" ? (
-                  <div className="code-message__footer code-message__footer--user">
-                    <div className="code-message__foot-meta code-message__foot-meta--user">
-                      <span>You</span>
-                      {formatMessageTime(item.message.createdAt) ? (
-                        <span>{formatMessageTime(item.message.createdAt)}</span>
+                </details>
+              );
+            }
+            
+            if (item.message.kind === "assistant" || item.message.kind === "user") {
+              return (
+                <div
+                  key={item.message.id}
+                  className={`code-message code-message--${item.message.kind} ${
+                    item.message.streaming ? "code-message--streaming" : ""
+                  }`}
+                >
+                  <div className="code-message__body">
+                    {item.message.text
+                      ? renderMessageBody(item.message.text)
+                      : item.message.streaming
+                        ? "…"
+                        : null}
+                  </div>
+                  {item.message.kind === "assistant" &&
+                  (item.message.completedAt || item.message.elapsedMs !== undefined || item.message.changedFiles?.length) ? (
+                    <div className="code-message__footer">
+                      {(formatMessageTime(item.message.completedAt ?? item.message.createdAt) || formatElapsedMs(item.message.elapsedMs)) ? (
+                        <div className="code-message__foot-meta">
+                          {formatMessageTime(item.message.completedAt ?? item.message.createdAt) && formatElapsedMs(item.message.elapsedMs) ? (
+                            <span>
+                              {formatMessageTime(item.message.completedAt ?? item.message.createdAt)} · {formatElapsedMs(item.message.elapsedMs)}
+                            </span>
+                          ) : formatMessageTime(item.message.completedAt ?? item.message.createdAt) ? (
+                            <span>{formatMessageTime(item.message.completedAt ?? item.message.createdAt)}</span>
+                          ) : formatElapsedMs(item.message.elapsedMs) ? (
+                            <span>{formatElapsedMs(item.message.elapsedMs)}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {item.message.changedFiles?.length ? (
+                        <div className="code-message__changed-files">
+                          {item.message.changedFiles.map((file) => (
+                            <span key={`${item.message.id}-${file.path}`} className="code-message__changed-file">
+                              <span className={`code-message__changed-file-status code-message__changed-file-status--${file.status}`}>
+                                {file.status === "modified"
+                                  ? "M"
+                                  : file.status === "added"
+                                    ? "A"
+                                    : file.status === "deleted"
+                                      ? "D"
+                                      : file.status === "renamed"
+                                        ? "R"
+                                        : file.status === "copied"
+                                          ? "C"
+                                          : file.status === "untracked"
+                                            ? "U"
+                                            : "•"}
+                              </span>
+                              <span className="code-message__changed-file-path">{file.path}</span>
+                            </span>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
+                  ) : null}
+                  {item.message.kind === "user" ? (
+                    <div className="code-message__footer code-message__footer--user">
+                      <div className="code-message__foot-meta code-message__foot-meta--user">
+                        {formatMessageTime(item.message.createdAt) ? (
+                          <span>{formatMessageTime(item.message.createdAt)}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+            
+            return (
               <details
                 key={item.message.id}
                 className={`code-message code-message--${item.message.kind} code-message--event ${
                   item.message.streaming ? "code-message--streaming" : ""
                 }`}
-                open={item.message.streaming || item.message.kind === "status"}
+                open={item.message.streaming || item.message.kind === "status" || item.isInLastTurn}
               >
                 <summary className="code-message__summary">
                   <div className="code-message__role">
@@ -1036,8 +1147,8 @@ export function CodeSurface({
                       : null}
                 </div>
               </details>
-            )
-          ))}
+            );
+          })}
 
           {activeTab.pendingRequest ? (
             <div className="code-request">

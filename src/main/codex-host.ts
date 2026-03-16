@@ -120,16 +120,17 @@ function mapInteractionMode(
 
 function toCodeTokenUsage(value: unknown): CodeTokenUsage | undefined {
   const tokenUsage = asObject(value);
-  const total = asObject(tokenUsage?.total ?? tokenUsage?.last);
-  if (!total) {
+  // Use 'last' for current context window usage, not 'total' which is cumulative
+  const last = asObject(tokenUsage?.last);
+  if (!last) {
     return undefined;
   }
 
-  const totalTokens = Number(total.totalTokens ?? 0);
-  const inputTokens = Number(total.inputTokens ?? 0);
-  const cachedInputTokens = Number(total.cachedInputTokens ?? 0);
-  const outputTokens = Number(total.outputTokens ?? 0);
-  const reasoningOutputTokens = Number(total.reasoningOutputTokens ?? 0);
+  const totalTokens = Number(last.totalTokens ?? 0);
+  const inputTokens = Number(last.inputTokens ?? 0);
+  const cachedInputTokens = Number(last.cachedInputTokens ?? 0);
+  const outputTokens = Number(last.outputTokens ?? 0);
+  const reasoningOutputTokens = Number(last.reasoningOutputTokens ?? 0);
   const modelContextWindow = Number(tokenUsage?.modelContextWindow ?? 0);
 
   return {
