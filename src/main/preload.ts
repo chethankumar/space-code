@@ -44,6 +44,20 @@ contextBridge.exposeInMainWorld("naeditor", {
     ipcRenderer.invoke("fs:read-file", { project, path }) as Promise<string>,
   writeFile: (project: ProjectRecord, path: string, content: string) =>
     ipcRenderer.invoke("fs:write-file", { project, path, content }) as Promise<void>,
+  createFile: (project: ProjectRecord, dirPath: string, fileName: string) =>
+    ipcRenderer.invoke("fs:create-file", { project, dirPath, fileName }) as Promise<void>,
+  createDirectory: (project: ProjectRecord, dirPath: string, dirName: string) =>
+    ipcRenderer.invoke("fs:create-directory", { project, dirPath, dirName }) as Promise<void>,
+  deletePath: (project: ProjectRecord, path: string, isDirectory: boolean) =>
+    ipcRenderer.invoke("fs:delete-path", { project, path, isDirectory }) as Promise<void>,
+  renamePath: (project: ProjectRecord, oldPath: string, newPath: string) =>
+    ipcRenderer.invoke("fs:rename-path", { project, oldPath, newPath }) as Promise<void>,
+  revealInFinder: (project: ProjectRecord, path: string) =>
+    ipcRenderer.invoke("fs:reveal-in-finder", { project, path }) as Promise<void>,
+  showContextMenu: (payload: { filePath: string; fileName: string; isDirectory: boolean; dirPath: string; projectId: string; projectRootPath: string }) =>
+    ipcRenderer.invoke("fs:show-context-menu", payload) as Promise<{ action: string; [key: string]: unknown }>,
+  showProjectContextMenu: (payload: { projectId: string; projectName: string }) =>
+    ipcRenderer.invoke("project:show-context-menu", payload) as Promise<{ action: string; [key: string]: unknown }>,
   searchProject: (project: ProjectRecord, query: string, options?: SearchQueryOptions) =>
     ipcRenderer.invoke("fs:search-project", { project, query, options }) as Promise<SearchMatch[]>,
   listGitRepositories: (project: ProjectRecord) =>

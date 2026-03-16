@@ -90,7 +90,7 @@ type AppStore = {
   moveSurface: (surface: SurfaceId, direction: "left" | "right") => void;
   toggleTrackControls: () => void;
   toggleSurfaceVisibility: (surface: SurfaceId) => void;
-  ensureDirectory: (rootPath: string) => Promise<void>;
+  ensureDirectory: (rootPath: string, forceRefresh?: boolean) => Promise<void>;
   searchProject: (projectId: string, query: string, options?: SearchQueryOptions) => Promise<SearchMatch[]>;
   openSearchResult: (projectId: string, match: SearchMatch, query?: string) => Promise<void>;
   openFile: (projectId: string, targetPath: string) => Promise<void>;
@@ -930,14 +930,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     );
     void get().persist();
   },
-  ensureDirectory: async (rootPath) => {
+  ensureDirectory: async (rootPath, forceRefresh = false) => {
     const project = get().activeProject();
     if (!project) {
       return;
     }
 
     const cacheKey = `${project.id}:${rootPath}`;
-    if (get().directoryCache[cacheKey]) {
+    if (!forceRefresh && get().directoryCache[cacheKey]) {
       return;
     }
 

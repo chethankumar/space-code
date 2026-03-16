@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
@@ -6,9 +7,11 @@ import {
   ChevronRight,
   Check,
   FileDiff,
+  FilePlus,
   FileText,
   Folder,
   FolderOpen,
+  FolderPlus,
   GitBranch,
   GitCommitVertical,
   GitCommitHorizontal,
@@ -16,13 +19,15 @@ import {
   GitPullRequestCreateArrow,
   ListFilter,
   Minus,
+  PenLine,
   Plus,
   RefreshCw,
   Regex,
   Search,
   Trash2,
   Undo2,
-  WholeWord
+  WholeWord,
+  X
 } from "lucide-react";
 import type {
   FileNode,
@@ -128,6 +133,83 @@ export function Inspector({
     excludeGlob: "node_modules,.git,dist,.next"
   });
   const [searchFiltersVisible, setSearchFiltersVisible] = useState(false);
+  const [inputModal, setInputModal] = useState<{
+    type: "newFile" | "newFolder" | "rename";
+    defaultValue?: string;
+    dirPath: string;
+    nodePath?: string;
+  } | null>(null);
+
+  const handleContextMenuAction = async (action: string, data: Record<string, unknown>) => {
+    console.log("[renderer] handleContextMenuAction:", action, data);
+    if (!project || !project.rootPath) return;
+
+    switch (action) {
+      case "newFile": {
+        console.log("[renderer] newFile dirPath:", data.dirPath);
+        setInputModal({ type: "newFile", dirPath: data.dirPath as string });
+        break;
+      }
+      case "newFolder": {
+        console.log("[renderer] newFolder dirPath:", data.dirPath);
+        setInputModal({ type: "newFolder", dirPath: data.dirPath as string });
+        break;
+      }
+      case "rename": {
+        console.log("[renderer] rename:", data.filePath, "dirPath:", data.dirPath);
+        setInputModal({ 
+          type: "rename", 
+          defaultValue: data.fileName as string, 
+          dirPath: data.dirPath as string,
+          nodePath: data.filePath as string 
+        });
+        break;
+      }
+      case "delete": {
+        console.log("[renderer] delete:", data.filePath, "isDirectory:", data.isDirectory);
+        const confirmed = confirm(`Delete "${data.filePath}"?`);
+        if (!confirmed) return;
+        try {
+          await window.naeditor.deletePath(project, data.filePath as string, data.isDirectory as boolean);
+          await ensureDirectory(project.rootPath, true);
+        } catch (err) {
+          console.error("Failed to delete:", err);
+        }
+        break;
+      }
+      case "reveal": {
+        await window.naeditor.revealInFinder(project, data.filePath as string);
+        break;
+      }
+    }
+  };
+
+  const handleInputSubmit = async (value: string) => {
+    if (!project || !project.rootPath || !inputModal) return;
+    
+    const dirPath = inputModal.dirPath;
+    console.log("[renderer] handleInputSubmit:", inputModal.type, "dirPath:", dirPath, "value:", value);
+    
+    try {
+      if (inputModal.type === "newFile") {
+        console.log("[renderer] Calling createFile with:", project, dirPath, value);
+        await window.naeditor.createFile(project, dirPath, value);
+      } else if (inputModal.type === "newFolder") {
+        console.log("[renderer] Calling createDirectory with:", project, dirPath, value);
+        await window.naeditor.createDirectory(project, dirPath, value);
+      } else if (inputModal.type === "rename" && inputModal.nodePath) {
+        const oldPath = inputModal.nodePath;
+        const parentDir = oldPath.substring(0, oldPath.lastIndexOf("/"));
+        const newPath = parentDir ? `${parentDir}/${value}` : value;
+        await window.naeditor.renamePath(project, oldPath, newPath);
+      }
+      await ensureDirectory(project.rootPath, true);
+    } catch (err) {
+      console.error("Operation failed:", err);
+    }
+    
+    setInputModal(null);
+  };
 
   const runSearch = async (nextQuery = searchQuery) => {
     if (!project) {
@@ -300,11 +382,133 @@ export function Inspector({
                       }))
                     }
                     onOpenFile={onOpenFile}
+                    onContextMenu={async (e, node) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const isDirectory = node.type === "directory";
+                      const dirPath = isDirectory ? node.path : node.path.substring(0, node.path.lastIndexOf("/"));
+                      const result = await window.naeditor.showContextMenu({
+                        filePath: node.path,
+                        fileName: node.name,
+                        isDirectory,
+                        dirPath,
+                        projectId: project.id,
+                        projectRootPath: project.rootPath || ""
+                      });
+                      if (result.action !== "cancel") {
+                        handleContextMenuAction(result.action, result);
+                      }
+                    }}
                   />
                 ))}
               </div>
             )}
           </div>
+        )}
+
+        {inputModal && createPortal(
+          <div className="modal-backdrop" onClick={() => setInputModal(null)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-card__header">
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {inputModal.type === "newFile" ? (
+                    <div style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "center",
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "12px",
+                      background: "color-mix(in srgb, var(--color-accent) 15%, transparent)",
+                      color: "var(--color-accent)"
+                    }}>
+                      <FilePlus size={20} strokeWidth={2} />
+                    </div>
+                  ) : inputModal.type === "newFolder" ? (
+                    <div style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "center",
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "12px",
+                      background: "color-mix(in srgb, var(--color-accent) 15%, transparent)",
+                      color: "var(--color-accent)"
+                    }}>
+                      <FolderPlus size={20} strokeWidth={2} />
+                    </div>
+                  ) : (
+                    <div style={{ 
+                      display: "flex", 
+                      alignItems: "center", 
+                      justifyContent: "center",
+                      width: "40px",
+                      height: "40px",
+                      borderRadius: "12px",
+                      background: "color-mix(in srgb, var(--color-accent) 15%, transparent)",
+                      color: "var(--color-accent)"
+                    }}>
+                      <PenLine size={20} strokeWidth={2} />
+                    </div>
+                  )}
+                  <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600, color: "var(--color-text-strong)" }}>
+                    {inputModal.type === "newFile" ? "Create New File" : inputModal.type === "newFolder" ? "Create New Folder" : "Rename"}
+                  </h3>
+                </div>
+                <button className="dialog-close-button" onClick={() => setInputModal(null)}>
+                  <X size={16} strokeWidth={2} />
+                </button>
+              </div>
+              <form className="modal-form" onSubmit={(e) => {
+                e.preventDefault();
+                const input = e.currentTarget.querySelector("input");
+                if (input?.value.trim()) {
+                  handleInputSubmit(input.value);
+                }
+              }}>
+                <div className="field">
+                  <label style={{ fontSize: "13px", fontWeight: 500, color: "var(--color-text-muted)" }}>
+                    {inputModal.type === "newFile" ? "File name" : inputModal.type === "newFolder" ? "Folder name" : "New name"}
+                  </label>
+                  <input
+                    autoFocus
+                    type="text"
+                    defaultValue={inputModal.defaultValue}
+                    placeholder={
+                      inputModal.type === "newFile" 
+                        ? "example.txt" 
+                        : inputModal.type === "newFolder" 
+                        ? "folder-name" 
+                        : "new-name"
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setInputModal(null);
+                      }
+                    }}
+                    style={{ fontSize: "14px" }}
+                  />
+                  {inputModal.dirPath && (
+                    <div style={{ fontSize: "12px", color: "var(--color-text-muted)", marginTop: "-4px" }}>
+                      {inputModal.type === "rename" 
+                        ? `Renaming in: ${inputModal.dirPath}`
+                        : `Creating in: ${inputModal.dirPath}`
+                      }
+                    </div>
+                  )}
+                </div>
+                <div className="modal-card__actions">
+                  <button type="button" className="ghost-button" onClick={() => setInputModal(null)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary-button">
+                    {inputModal.type === "rename" ? "Rename" : "Create"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
         )}
 
         {workspace.track.inspector.mode === "git" && (
@@ -742,8 +946,9 @@ export function Inspector({
                       </div>
                     );
                   })}
-                </div>
-              )}
+          </div>
+        )}
+
             </div>
           </div>
         )}
@@ -1383,9 +1588,10 @@ type FileTreeNodeProps = {
   expandedPaths: Record<string, boolean>;
   onToggle: (path: string) => void;
   onOpenFile: (path: string) => void;
+  onContextMenu?: (e: React.MouseEvent, node: FileNode) => void;
 };
 
-function FileTreeNode({ node, depth, expandedPaths, onToggle, onOpenFile }: FileTreeNodeProps) {
+function FileTreeNode({ node, depth, expandedPaths, onToggle, onOpenFile, onContextMenu }: FileTreeNodeProps) {
   const isDirectory = node.type === "directory";
   const isExpanded = expandedPaths[node.path] ?? depth < 1;
   const fileVisual = getFileVisual(node.name);
@@ -1403,12 +1609,17 @@ function FileTreeNode({ node, depth, expandedPaths, onToggle, onOpenFile }: File
           }
           onOpenFile(node.path);
         }}
+        onContextMenu={(e) => {
+          if (onContextMenu) {
+            onContextMenu(e, node);
+          }
+        }}
       >
         <span className="file-entry__lead">
           {isDirectory ? (
             <ChevronRight
               className={isExpanded ? "file-entry__chevron file-entry__chevron--expanded" : "file-entry__chevron"}
-              size={13}
+              size={11}
               strokeWidth={2}
             />
           ) : (
@@ -1416,8 +1627,8 @@ function FileTreeNode({ node, depth, expandedPaths, onToggle, onOpenFile }: File
           )}
           <TreeIcon
             className={isDirectory ? "file-entry__icon" : `file-entry__icon ${fileVisual.className}`}
-            size={14}
-            strokeWidth={1.9}
+            size={12}
+            strokeWidth={2}
           />
         </span>
         <span className="file-entry__label">{node.name}</span>
@@ -1432,6 +1643,7 @@ function FileTreeNode({ node, depth, expandedPaths, onToggle, onOpenFile }: File
               expandedPaths={expandedPaths}
               onToggle={onToggle}
               onOpenFile={onOpenFile}
+              onContextMenu={onContextMenu}
             />
           ))
         : null}

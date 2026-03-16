@@ -1,6 +1,6 @@
 import clsx from "clsx";
-import { FolderPlus, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Server, Settings2, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { FolderPlus, PanelLeftClose, PanelLeftOpen, Server, Settings2 } from "lucide-react";
+import { useRef } from "react";
 import type { ProjectRecord } from "@shared/types";
 
 type ProjectRailProps = {
@@ -27,19 +27,21 @@ export function ProjectRail({
   onRemoveProject
 }: ProjectRailProps) {
   const CollapseIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
-  const [menuProjectId, setMenuProjectId] = useState<string | null>(null);
   const railRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!railRef.current?.contains(event.target as Node)) {
-        setMenuProjectId(null);
-      }
-    };
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, []);
+  const handleProjectContextMenu = async (e: React.MouseEvent, project: ProjectRecord) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const result = await window.naeditor.showProjectContextMenu({
+      projectId: project.id,
+      projectName: project.name
+    });
+    
+    if (result.action === "remove") {
+      onRemoveProject(project.id);
+    }
+  };
 
   return (
     <aside ref={railRef} className={clsx("project-rail", collapsed && "project-rail--collapsed")}>
@@ -79,47 +81,17 @@ export function ProjectRail({
               key={project.id}
               className={clsx("project-chip", isActive && "project-chip--active")}
               onClick={() => onSelect(project.id)}
+              onContextMenu={(e) => handleProjectContextMenu(e, project)}
               title={project.name}
             >
               <span className="project-chip__color" style={{ backgroundColor: project.color }} />
               {!collapsed && (
-                <>
-                  <span className="project-chip__body">
-                    <span className="project-chip__name">{project.name}</span>
-                    <span className="project-chip__meta">
-                      {project.kind === "remote" ? `Remote ${project.host ? `(${project.host})` : ""}` : "Local"}
-                    </span>
+                <span className="project-chip__body">
+                  <span className="project-chip__name">{project.name}</span>
+                  <span className="project-chip__meta">
+                    {project.kind === "remote" ? `Remote ${project.host ? `(${project.host})` : ""}` : "Local"}
                   </span>
-                  <span className="project-chip__actions">
-                    <button
-                      className="project-chip__menu-button"
-                      title="Project options"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setMenuProjectId((current) => (current === project.id ? null : project.id));
-                      }}
-                    >
-                      <MoreHorizontal size={14} strokeWidth={2} />
-                    </button>
-                    {menuProjectId === project.id ? (
-                      <span className="project-chip__menu" onClick={(event) => event.stopPropagation()}>
-                        <button
-                          className="project-chip__menu-item project-chip__menu-item--danger"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setMenuProjectId(null);
-                            onRemoveProject(project.id);
-                          }}
-                        >
-                          <Trash2 size={13} strokeWidth={1.9} />
-                          <span>Remove Project</span>
-                        </button>
-                      </span>
-                    ) : null}
-                  </span>
-                </>
+                </span>
               )}
             </button>
           );

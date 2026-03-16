@@ -1793,6 +1793,107 @@ app.whenReady().then(() => {
   ipcMain.handle("fs:write-file", async (_event, payload: { project: ProjectRecord; path: string; content: string }) =>
     writeProjectFile(payload.project, payload.path, payload.content)
   );
+  ipcMain.handle("fs:create-file", async (_event, payload: { project: ProjectRecord; dirPath: string; fileName: string }) => {
+    try {
+      console.log("[naeditor] createFile:", payload.dirPath, payload.fileName);
+      const filePath = path.join(payload.dirPath, payload.fileName);
+      console.log("[naeditor] Full path:", filePath);
+      await fs.writeFile(filePath, "");
+      console.log("[naeditor] File created successfully");
+    } catch (err) {
+      console.error("[naeditor] createFile error:", err);
+      throw err;
+    }
+  });
+  ipcMain.handle("fs:create-directory", async (_event, payload: { project: ProjectRecord; dirPath: string; dirName: string }) => {
+    try {
+      console.log("[naeditor] createDirectory:", payload.dirPath, payload.dirName);
+      const dirPath = path.join(payload.dirPath, payload.dirName);
+      console.log("[naeditor] Full path:", dirPath);
+      await fs.mkdir(dirPath, { recursive: true });
+      console.log("[naeditor] Directory created successfully");
+    } catch (err) {
+      console.error("[naeditor] createDirectory error:", err);
+      throw err;
+    }
+  });
+  ipcMain.handle("fs:delete-path", async (_event, payload: { project: ProjectRecord; path: string; isDirectory: boolean }) => {
+    if (payload.isDirectory) {
+      await fs.rm(payload.path, { recursive: true });
+    } else {
+      await fs.unlink(payload.path);
+    }
+  });
+  ipcMain.handle("fs:rename-path", async (_event, payload: { project: ProjectRecord; oldPath: string; newPath: string }) => {
+    console.log("[naeditor] renamePath:", payload.oldPath, "->", payload.newPath);
+    await fs.rename(payload.oldPath, payload.newPath);
+    console.log("[naeditor] Rename successful");
+  });
+  ipcMain.handle("fs:reveal-in-finder", async (_event, payload: { project: ProjectRecord; path: string }) => {
+    shell.showItemInFolder(payload.path);
+  });
+  ipcMain.handle("fs:show-context-menu", async (_event, payload: { 
+    filePath: string;
+    fileName: string;
+    isDirectory: boolean;
+    dirPath: string;
+    projectId: string;
+    projectRootPath: string;
+  }) => {
+    console.log("[naeditor] showContextMenu payload:", payload);
+    return new Promise((resolve) => {
+      const template: Electron.MenuItemConstructorOptions[] = [
+        { label: "New File", click: () => resolve({ action: "newFile", dirPath: payload.dirPath, isDirectory: payload.isDirectory, filePath: payload.filePath }) },
+        { label: "New Folder", click: () => resolve({ action: "newFolder", dirPath: payload.dirPath, isDirectory: payload.isDirectory, filePath: payload.filePath }) },
+        { type: "separator" },
+        { label: "Rename", click: () => resolve({ action: "rename", filePath: payload.filePath, fileName: payload.fileName, dirPath: payload.dirPath, isDirectory: payload.isDirectory }) },
+        { label: "Delete", click: () => resolve({ action: "delete", filePath: payload.filePath, isDirectory: payload.isDirectory, dirPath: payload.dirPath }) },
+        { type: "separator" },
+        { label: "Reveal in Finder", click: () => resolve({ action: "reveal", filePath: payload.filePath, isDirectory: payload.isDirectory }) },
+      ];
+
+      const menu = Menu.buildFromTemplate(template);
+      menu.popup({
+        window: mainWindow ?? undefined,
+        callback: () => resolve({ action: "cancel" })
+      });
+    });
+  });
+  ipcMain.handle("project:show-context-menu", async (_event, payload: { 
+    projectId: string;
+    projectName: string;
+  }) => {
+    console.log("[naeditor] showProjectContextMenu payload:", payload);
+    return new Promise((resolve) => {
+      const template: Electron.MenuItemConstructorOptions[] = [
+        { 
+          label: "Remove Project", 
+          click: () => {
+            const result = dialog.showMessageBoxSync(mainWindow!, {
+              type: "warning",
+              buttons: ["Cancel", "Remove"],
+              defaultId: 0,
+              cancelId: 0,
+              title: "Remove Project",
+              message: `Remove "${payload.projectName}" from workspace?`,
+              detail: "This will only remove the project from your workspace. No files will be deleted."
+            });
+            if (result === 1) {
+              resolve({ action: "remove", projectId: payload.projectId });
+            } else {
+              resolve({ action: "cancel" });
+            }
+          }
+        },
+      ];
+
+      const menu = Menu.buildFromTemplate(template);
+      menu.popup({
+        window: mainWindow ?? undefined,
+        callback: () => resolve({ action: "cancel" })
+      });
+    });
+  });
   ipcMain.handle("fs:search-project", async (_event, payload: { project: ProjectRecord; query: string; options?: SearchQueryOptions }) =>
     searchProject(payload.project, payload.query, payload.options)
   );
