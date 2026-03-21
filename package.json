@@ -87,7 +87,7 @@
       "gatekeeperAssess": false
     },
     "win": {
-      "icon": "src/renderer/assets/logo.png",
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -113,7 +113,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "src/renderer/assets/logo.png"
+      "installerIcon": "build/icon.ico"
     }
   }
 }
