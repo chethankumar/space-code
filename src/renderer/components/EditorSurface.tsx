@@ -52,6 +52,7 @@ export function EditorSurface({
   const SidebarIcon = sidebarVisible ? PanelLeftClose : PanelLeftOpen;
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const editorRef = useRef<any>(null);
+  const monacoRef = useRef<typeof Monaco | null>(null);
   const decorationsRef = useRef<string[]>([]);
   const languageLabel = useMemo(
     () =>
@@ -368,10 +369,51 @@ export function EditorSurface({
                 key={activeTab.path}
                 height="100%"
                 theme={appSettings.editorTheme}
-                beforeMount={(monaco) => registerEditorThemes(monaco)}
+                beforeMount={(monaco) => {
+                  registerEditorThemes(monaco);
+                  monacoRef.current = monaco;
+                  
+                  // Configure TypeScript for editing (not compiling)
+                  // Use react-jsx transform and disable validation for missing modules
+                  monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+                    jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+                    target: monaco.languages.typescript.ScriptTarget.ESNext,
+                    module: monaco.languages.typescript.ModuleKind.ESNext,
+                    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Bundler,
+                    allowJs: true,
+                    allowSyntheticDefaultImports: true,
+                    esModuleInterop: true,
+                    skipLibCheck: true,
+                    noEmit: true,
+                    isolatedModules: true,
+                    resolveJsonModule: true,
+                  });
+                  
+                  monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+                    jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
+                    target: monaco.languages.typescript.ScriptTarget.ESNext,
+                    module: monaco.languages.typescript.ModuleKind.ESNext,
+                    moduleResolution: monaco.languages.typescript.ModuleResolutionKind.Bundler,
+                    allowJs: true,
+                    allowSyntheticDefaultImports: true,
+                    esModuleInterop: true,
+                    noEmit: true,
+                  });
+                  
+                  // This is the key: disable validation for module imports
+                  // Monaco can't resolve node_modules, so don't complain about it
+                  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+                    noSemanticValidation: true,  // Disable semantic checks (like missing imports)
+                    noSyntaxValidation: false,   // Keep syntax checks (like JSX syntax)
+                  });
+                  
+                  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                    noSemanticValidation: true,
+                    noSyntaxValidation: false,
+                  });
+                }}
                 path={activeTab.path}
-                defaultLanguage={activeTab.kind === "git-commit" || activeTab.kind === "git-compare" ? "diff" : guessLanguage(activeTab.path)}
-                value={activeTab.content}
+                defaultValue={activeTab.content}
                 onChange={(value) => {
                   if (activeTab.kind === "file") {
                     onChangeContent(value ?? "");
@@ -391,6 +433,14 @@ export function EditorSurface({
                       column: event.position.column
                     });
                   });
+                  
+                  // Set language for special cases
+                  if (activeTab.kind === "git-commit" || activeTab.kind === "git-compare") {
+                    const model = editor.getModel();
+                    if (model && monacoRef.current) {
+                      monacoRef.current.editor.setModelLanguage(model, "diff");
+                    }
+                  }
                 }}
                 options={{
                   automaticLayout: true,
@@ -624,11 +674,13 @@ function registerEditorThemes(monaco: typeof Monaco) {
 function guessLanguage(path: string) {
   const extension = path.split(".").pop();
   switch (extension) {
-    case "ts":
     case "tsx":
+      return "typescriptreact";
+    case "ts":
       return "typescript";
-    case "js":
     case "jsx":
+      return "javascriptreact";
+    case "js":
       return "javascript";
     case "json":
       return "json";
@@ -653,8 +705,12 @@ function isImageFile(path: string): boolean {
 function getLanguageLabel(path?: string) {
   const language = guessLanguage(path ?? "");
   switch (language) {
+    case "typescriptreact":
+      return "TypeScript React";
     case "typescript":
       return "TypeScript";
+    case "javascriptreact":
+      return "JavaScript React";
     case "javascript":
       return "JavaScript";
     case "json":

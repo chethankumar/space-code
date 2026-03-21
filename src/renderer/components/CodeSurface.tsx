@@ -1065,7 +1065,13 @@ export function CodeSurface({
                     {item.message.text
                       ? renderMessageBody(item.message.text)
                       : item.message.streaming
-                        ? "…"
+                        ? (
+                          <span className="code-typing-indicator">
+                            <span className="code-typing-dot"></span>
+                            <span className="code-typing-dot"></span>
+                            <span className="code-typing-dot"></span>
+                          </span>
+                        )
                         : null}
                   </div>
                   {item.message.kind === "assistant" &&

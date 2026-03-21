@@ -4105,6 +4105,56 @@ button {
   white-space: nowrap;
 }
 
+.code-typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, rgba(96, 165, 250, 0.06), rgba(139, 92, 246, 0.06));
+  border: 1px solid rgba(96, 165, 250, 0.1);
+  border-radius: 12px;
+}
+
+.code-typing-dot {
+  width: 5px;
+  height: 5px;
+  background: linear-gradient(135deg, #60a5fa, #8b5cf6);
+  border-radius: 50%;
+  animation: codeTypingBounce 1.4s ease-in-out infinite;
+}
+
+.code-typing-dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.code-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.code-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes codeTypingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+:root[data-theme="light"] .code-typing-indicator {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(139, 92, 246, 0.08));
+  border-color: rgba(59, 130, 246, 0.15);
+}
+
+:root[data-theme="light"] .code-typing-dot {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+}
+
 .code-message-separator {
   display: flex;
   align-items: center;

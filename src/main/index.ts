@@ -1947,10 +1947,13 @@ app.whenReady().then(() => {
   }) => {
     console.log("[naeditor] showProjectContextMenu payload:", payload);
     return new Promise((resolve) => {
+      let actionTaken = false;
+      
       const template: Electron.MenuItemConstructorOptions[] = [
         { 
           label: "Remove Project", 
           click: () => {
+            actionTaken = true;
             const result = dialog.showMessageBoxSync(mainWindow!, {
               type: "warning",
               buttons: ["Cancel", "Remove"],
@@ -1972,7 +1975,12 @@ app.whenReady().then(() => {
       const menu = Menu.buildFromTemplate(template);
       menu.popup({
         window: mainWindow ?? undefined,
-        callback: () => resolve({ action: "cancel" })
+        callback: () => {
+          // Only resolve if no menu item was clicked
+          if (!actionTaken) {
+            resolve({ action: "cancel" });
+          }
+        }
       });
     });
   });
