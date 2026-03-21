@@ -158,13 +158,16 @@ contextBridge.exposeInMainWorld("naeditor", {
     url: string;
     bounds: BrowserSurfaceBounds;
     visible: boolean;
+    devtools?: boolean;
   }) => ipcRenderer.invoke("browser:sync-view", payload) as Promise<void>,
   hideBrowserView: (projectId: string) => ipcRenderer.invoke("browser:hide-view", projectId) as Promise<void>,
   browserCommand: (projectId: string, command: "back" | "forward" | "reload" | "devtools" | "open-external") =>
     ipcRenderer.invoke("browser:command", { projectId, command }) as Promise<void>,
+  loadBrowserUrl: (projectId: string, url: string) =>
+    ipcRenderer.invoke("browser:load-url", { projectId, url }) as Promise<void>,
   openExternalUrl: (url: string) => ipcRenderer.invoke("browser:open-external-url", url) as Promise<void>,
-  onBrowserState: (listener: (payload: { projectId: string; state: BrowserViewState }) => void) => {
-    const wrapped = (_event: IpcRendererEvent, payload: { projectId: string; state: BrowserViewState }) => listener(payload);
+  onBrowserState: (listener: (payload: { projectId: string; state: { url?: string; isLoading?: boolean; canGoBack?: boolean; canGoForward?: boolean } }) => void) => {
+    const wrapped = (_event: IpcRendererEvent, payload: { projectId: string; state: { url?: string; isLoading?: boolean; canGoBack?: boolean; canGoForward?: boolean } }) => listener(payload);
     ipcRenderer.on("browser:state", wrapped);
     return () => ipcRenderer.removeListener("browser:state", wrapped);
   },

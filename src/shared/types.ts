@@ -742,11 +742,13 @@ export type NaEditorApi = {
     url: string;
     bounds: BrowserSurfaceBounds;
     visible: boolean;
+    devtools?: boolean;
   }) => Promise<void>;
   hideBrowserView: (projectId: string) => Promise<void>;
   browserCommand: (projectId: string, command: "back" | "forward" | "reload" | "devtools" | "open-external") => Promise<void>;
+  loadBrowserUrl: (projectId: string, url: string) => Promise<void>;
   openExternalUrl: (url: string) => Promise<void>;
-  onBrowserState: (listener: (payload: { projectId: string; state: BrowserViewState }) => void) => () => void;
+  onBrowserState: (listener: (payload: { projectId: string; state: { url?: string; isLoading?: boolean; canGoBack?: boolean; canGoForward?: boolean } }) => void) => () => void;
   ensurePortForward: (project: ProjectRecord, remoteUrl: string) => Promise<PortForwardInfo | null>;
   stopPortForward: (projectId: string) => Promise<void>;
   runCommand: (cwd: string, command: string) => Promise<ShellCommandResult>;

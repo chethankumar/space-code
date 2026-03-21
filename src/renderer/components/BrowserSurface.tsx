@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, Globe, Plus, RotateCw, Terminal, X } from "lucide-react";
-import type { BrowserTab, BrowserViewState, PortForwardInfo, ProjectRecord } from "@shared/types";
+import type { BrowserTab, PortForwardInfo, ProjectRecord } from "@shared/types";
 
 type BrowserSurfaceProps = {
   project: ProjectRecord;
@@ -19,26 +19,18 @@ type BrowserSurfaceProps = {
   devtoolsRequestKey: number;
 };
 
-type BrowserWebview = HTMLElement & {
-  src: string;
-  canGoBack: () => boolean;
-  canGoForward: () => boolean;
-  getURL: () => string;
-  getTitle: () => string;
-  isLoading: () => boolean;
-  loadURL: (url: string) => Promise<void>;
-  reload: () => void;
-  goBack: () => void;
-  goForward: () => void;
-  openDevTools: () => void;
+type BrowserState = {
+  url: string;
+  isLoading: boolean;
+  canGoBack: boolean;
+  canGoForward: boolean;
 };
 
-const EMPTY_BROWSER_STATE: BrowserViewState = {
+const EMPTY_BROWSER_STATE: BrowserState = {
   url: "about:blank",
-  title: "Preview",
+  isLoading: false,
   canGoBack: false,
-  canGoForward: false,
-  isLoading: false
+  canGoForward: false
 };
 
 export function BrowserSurface({
@@ -58,11 +50,8 @@ export function BrowserSurface({
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [forwardBusy, setForwardBusy] = useState(false);
   const [draftUrl, setDraftUrl] = useState(url);
-  const [browserStates, setBrowserStates] = useState<Record<string, BrowserViewState>>({});
+  const [browserState, setBrowserState] = useState<BrowserState>(EMPTY_BROWSER_STATE);
   const [previewWidth, setPreviewWidth] = useState<number | null>(null);
-
-  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
-  const browserState = activeTab ? browserStates[activeTab.id] ?? EMPTY_BROWSER_STATE : EMPTY_BROWSER_STATE;
 
   const effectiveUrl = useMemo(() => {
     if (project.kind === "remote" && portForward?.active) {
@@ -78,24 +67,67 @@ export function BrowserSurface({
   }, [activeTabId, url]);
 
   useEffect(() => {
-    if (!devtoolsRequestKey) {
-      return;
-    }
-    document.querySelector<BrowserWebview>(".browser-webview--active")?.openDevTools();
-  }, [devtoolsRequestKey]);
+    const unsubscribe = window.naeditor.onBrowserState((payload) => {
+      if (payload.projectId === project.id) {
+        setBrowserState((prev) => ({
+          ...prev,
+          ...payload.state
+        }));
+      }
+    });
+    return unsubscribe;
+  }, [project.id]);
 
   useEffect(() => {
     const frame = frameRef.current;
-    if (!frame) {
-      return;
-    }
+    if (!frame) return;
+
+    let syncTimeout: ReturnType<typeof setTimeout>;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(syncTimeout);
+      syncTimeout = setTimeout(() => {
+        const rect = frame.getBoundingClientRect();
+      window.naeditor.syncBrowserView({
+        projectId: project.id,
+        url: normalizedUrl,
+        bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        visible: true,
+        devtools: false
+      });
+      }, 50);
+    });
+
+    observer.observe(frame);
+
+    const initialRect = frame.getBoundingClientRect();
+    window.naeditor.syncBrowserView({
+      projectId: project.id,
+      url: normalizedUrl,
+      bounds: { x: initialRect.x, y: initialRect.y, width: initialRect.width, height: initialRect.height },
+      visible: true,
+      devtools: false
+    });
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(syncTimeout);
+      window.naeditor.hideBrowserView(project.id);
+    };
+  }, [project.id, normalizedUrl]);
+
+  useEffect(() => {
+    if (!devtoolsRequestKey) return;
+    window.naeditor.browserCommand(project.id, "devtools");
+  }, [devtoolsRequestKey, project.id]);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
 
     const clampWidth = () => {
       const maxWidth = Math.max(360, frame.clientWidth);
       setPreviewWidth((current) => {
-        if (current === null) {
-          return maxWidth;
-        }
+        if (current === null) return maxWidth;
         return Math.max(360, Math.min(maxWidth, current));
       });
     };
@@ -106,44 +138,20 @@ export function BrowserSurface({
     return () => observer.disconnect();
   }, []);
 
-  const handleStateSnapshot = useCallback((tabId: string, state: BrowserViewState) => {
-    setBrowserStates((current) => {
-      const previous = current[tabId];
-      if (
-        previous &&
-        previous.url === state.url &&
-        previous.title === state.title &&
-        previous.faviconUrl === state.faviconUrl &&
-        previous.canGoBack === state.canGoBack &&
-        previous.canGoForward === state.canGoForward &&
-        previous.isLoading === state.isLoading
-      ) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [tabId]: state
-      };
-    });
-  }, []);
-
-  const commitExplicitUrl = (nextValue: string) => {
+  const commitExplicitUrl = useCallback((nextValue: string) => {
     const nextUrl = nextValue.trim();
-    if (nextUrl === url) {
-      return;
-    }
+    if (nextUrl === url) return;
     onBrowserUrlChange(nextUrl);
-  };
+    window.naeditor.loadBrowserUrl(project.id, normalizeBrowserUrl(nextUrl));
+  }, [url, onBrowserUrlChange, project.id]);
 
-  const currentExternalUrl =
-    browserState.url && browserState.url !== "about:blank" ? browserState.url : normalizeBrowserUrl(draftUrl);
+  const currentExternalUrl = browserState.url && browserState.url !== "about:blank" 
+    ? browserState.url 
+    : normalizeBrowserUrl(draftUrl);
 
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const frame = frameRef.current;
-    if (!frame) {
-      return;
-    }
+    if (!frame) return;
 
     event.preventDefault();
     const pointerId = event.pointerId;
@@ -213,7 +221,7 @@ export function BrowserSurface({
             className="browser-tool-button"
             disabled={!browserState.canGoBack}
             title="Back"
-            onClick={() => document.querySelector<BrowserWebview>(".browser-webview--active")?.goBack()}
+            onClick={() => window.naeditor.browserCommand(project.id, "back")}
           >
             <ArrowLeft size={14} strokeWidth={1.9} />
           </button>
@@ -221,7 +229,7 @@ export function BrowserSurface({
             className="browser-tool-button"
             disabled={!browserState.canGoForward}
             title="Forward"
-            onClick={() => document.querySelector<BrowserWebview>(".browser-webview--active")?.goForward()}
+            onClick={() => window.naeditor.browserCommand(project.id, "forward")}
           >
             <ArrowRight size={14} strokeWidth={1.9} />
           </button>
@@ -233,7 +241,7 @@ export function BrowserSurface({
                 commitExplicitUrl(draftUrl);
                 return;
               }
-              document.querySelector<BrowserWebview>(".browser-webview--active")?.reload();
+              window.naeditor.browserCommand(project.id, "reload");
             }}
           >
             <RotateCw size={14} strokeWidth={1.9} className={browserState.isLoading ? "browser-tool-button__spin" : ""} />
@@ -250,8 +258,8 @@ export function BrowserSurface({
           </button>
           <button
             className="browser-tool-button"
-            title="Open devtools"
-            onClick={() => document.querySelector<BrowserWebview>(".browser-webview--active")?.openDevTools()}
+            title="Toggle devtools"
+            onClick={() => window.naeditor.browserCommand(project.id, "devtools")}
           >
             <Terminal size={14} strokeWidth={1.9} />
           </button>
@@ -314,24 +322,12 @@ export function BrowserSurface({
           >
             <span className="browser-preview-handle__grip" />
           </button>
-        {tabs.some((tab) => normalizeBrowserUrl(tab.id === activeTabId ? effectiveUrl : tab.url) !== "about:blank") ? (
-          <>
-            {tabs.map((tab) => (
-              <BrowserTabWebview
-                key={tab.id}
-                projectId={project.id}
-                tab={tab}
-                active={tab.id === activeTabId}
-                src={normalizeBrowserUrl(tab.id === activeTabId ? effectiveUrl : tab.url)}
-                onStateChange={onBrowserStateChange}
-                onStateSnapshot={handleStateSnapshot}
-              />
-            ))}
-          </>
+        {normalizedUrl !== "about:blank" ? (
+          <div className="browser-view-placeholder" />
         ) : (
           <div className="browser-frame__overlay">
             <div className="browser-frame__meta">
-              <span>{activeTab?.url || "Set a preview URL to attach a live browser surface."}</span>
+              <span>{url || "Set a preview URL to attach a live browser surface."}</span>
               {project.kind === "remote" ? (
                 <span className="browser-frame__submeta">
                   {portForward?.active
@@ -348,144 +344,9 @@ export function BrowserSurface({
   );
 }
 
-type BrowserTabWebviewProps = {
-  projectId: string;
-  tab: BrowserTab;
-  active: boolean;
-  src: string;
-  onStateChange: (state: { url: string; title: string; faviconUrl?: string }, tabId?: string) => void;
-  onStateSnapshot: (tabId: string, state: BrowserViewState) => void;
-};
-
-function BrowserTabWebview({ projectId, tab, active, src, onStateChange, onStateSnapshot }: BrowserTabWebviewProps) {
-  const webviewRef = useRef<BrowserWebview | null>(null);
-
-  useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview) {
-      return;
-    }
-
-    const syncState = (override?: Partial<BrowserViewState>) => {
-      const resolvedUrl = safeWebviewUrl(webview);
-      const nextUrl = resolvedUrl === "about:blank" && src !== "about:blank" ? src : resolvedUrl;
-      const nextState: BrowserViewState = {
-        url: nextUrl,
-        title: override?.title ?? (safeWebviewTitle(webview) || tab.title || "Preview"),
-        faviconUrl: override?.faviconUrl ?? tab.faviconUrl,
-        canGoBack: safeCanGoBack(webview),
-        canGoForward: safeCanGoForward(webview),
-        isLoading: safeIsLoading(webview)
-      };
-      onStateSnapshot(tab.id, nextState);
-      onStateChange(
-        {
-          url: nextState.url,
-          title: nextState.title,
-          faviconUrl: nextState.faviconUrl
-        },
-        tab.id
-      );
-    };
-
-    const handleTitleUpdated = (event: Event) => {
-      const title = (event as Event & { title?: string }).title ?? (safeWebviewTitle(webview) || "Preview");
-      syncState({ title });
-    };
-
-    const handleFaviconUpdated = (event: Event) => {
-      const faviconUrl = (event as Event & { favicons?: string[] }).favicons?.[0];
-      syncState({ faviconUrl });
-    };
-
-    webview.addEventListener("dom-ready", syncState as EventListener);
-    webview.addEventListener("did-start-loading", syncState as EventListener);
-    webview.addEventListener("did-stop-loading", syncState as EventListener);
-    webview.addEventListener("did-navigate", syncState as EventListener);
-    webview.addEventListener("did-navigate-in-page", syncState as EventListener);
-    webview.addEventListener("page-title-updated", handleTitleUpdated as EventListener);
-    webview.addEventListener("page-favicon-updated", handleFaviconUpdated as EventListener);
-
-    syncState();
-
-    return () => {
-      webview.removeEventListener("dom-ready", syncState as EventListener);
-      webview.removeEventListener("did-start-loading", syncState as EventListener);
-      webview.removeEventListener("did-stop-loading", syncState as EventListener);
-      webview.removeEventListener("did-navigate", syncState as EventListener);
-      webview.removeEventListener("did-navigate-in-page", syncState as EventListener);
-      webview.removeEventListener("page-title-updated", handleTitleUpdated as EventListener);
-      webview.removeEventListener("page-favicon-updated", handleFaviconUpdated as EventListener);
-    };
-  }, [src, tab.id]);
-
-  useEffect(() => {
-    const webview = webviewRef.current;
-    if (!webview) {
-      return;
-    }
-    if (webview.src !== src) {
-      webview.src = src;
-    }
-  }, [src]);
-
-  return (
-    <webview
-      ref={(node) => {
-        webviewRef.current = node as BrowserWebview | null;
-      }}
-      className={`browser-webview ${active ? "browser-webview--active" : "browser-webview--inactive"}`}
-      partition={`persist:browser-${projectId}-${tab.id}`}
-      src={src}
-    />
-  );
-}
-
-function safeWebviewUrl(webview: BrowserWebview) {
-  try {
-    return webview.getURL() || "about:blank";
-  } catch {
-    return "about:blank";
-  }
-}
-
-function safeWebviewTitle(webview: BrowserWebview) {
-  try {
-    return webview.getTitle() || "Preview";
-  } catch {
-    return "Preview";
-  }
-}
-
-function safeCanGoBack(webview: BrowserWebview) {
-  try {
-    return webview.canGoBack();
-  } catch {
-    return false;
-  }
-}
-
-function safeCanGoForward(webview: BrowserWebview) {
-  try {
-    return webview.canGoForward();
-  } catch {
-    return false;
-  }
-}
-
-function safeIsLoading(webview: BrowserWebview) {
-  try {
-    return webview.isLoading();
-  } catch {
-    return false;
-  }
-}
-
 function normalizeBrowserUrl(value: string) {
   const trimmed = value.trim();
-  if (!trimmed) {
-    return "about:blank";
-  }
+  if (!trimmed) return "about:blank";
 
   const withProtocol = trimmed.startsWith("http://") || trimmed.startsWith("https://") ? trimmed : `http://${trimmed}`;
 

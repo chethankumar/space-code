@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, protocol } from "electron";
+import { app, BrowserWindow, BrowserView, dialog, ipcMain, Menu, shell, protocol } from "electron";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -57,6 +57,7 @@ const terminalRequests = new Map<
 >();
 let terminalHost: ChildProcess | null = null;
 const codexHost = new CodexHost();
+const browserViews = new Map<string, { view: BrowserView; devtoolsOpen: boolean; url: string }>();
 const portForwards = new Map<
   string,
   {
@@ -2071,9 +2072,135 @@ app.whenReady().then(() => {
   ipcMain.handle("code:stop-session", async (_event, sessionId: string) => {
     codexHost.stopSession(sessionId);
   });
-  ipcMain.handle("browser:sync-view", async () => undefined);
-  ipcMain.handle("browser:hide-view", async () => undefined);
-  ipcMain.handle("browser:command", async () => undefined);
+
+  ipcMain.handle("browser:sync-view", async (_event, payload: {
+    projectId: string;
+    url: string;
+    bounds: { x: number; y: number; width: number; height: number };
+    visible: boolean;
+    devtools?: boolean;
+  }) => {
+    if (!mainWindow) return;
+
+    const existing = browserViews.get(payload.projectId);
+
+    if (!payload.visible) {
+      if (existing) {
+        mainWindow.removeBrowserView(existing.view);
+        browserViews.delete(payload.projectId);
+      }
+      return;
+    }
+
+    let view: BrowserView;
+    let isNew = false;
+
+    if (existing) {
+      view = existing.view;
+    } else {
+      view = new BrowserView({
+        webPreferences: {
+          partition: `persist:browser-${payload.projectId}`,
+          contextIsolation: true,
+          nodeIntegration: false,
+          webSecurity: false,
+        }
+      });
+      isNew = true;
+      browserViews.set(payload.projectId, { view, devtoolsOpen: false, url: "" });
+
+      view.webContents.on("did-start-loading", () => {
+        mainWindow?.webContents.send("browser:state", {
+          projectId: payload.projectId,
+          state: { isLoading: true }
+        });
+      });
+
+      view.webContents.on("did-stop-loading", () => {
+        mainWindow?.webContents.send("browser:state", {
+          projectId: payload.projectId,
+          state: { isLoading: false }
+        });
+      });
+
+      view.webContents.on("did-navigate", (_event, url) => {
+        const info = browserViews.get(payload.projectId);
+        if (info) {
+          info.url = url;
+          mainWindow?.webContents.send("browser:state", {
+            projectId: payload.projectId,
+            state: { url, canGoBack: view.webContents.canGoBack(), canGoForward: view.webContents.canGoForward() }
+          });
+        }
+      });
+    }
+
+    if (isNew) {
+      mainWindow.addBrowserView(view);
+    }
+
+    view.setBounds(payload.bounds);
+    view.setAutoResize({ width: true, height: true, horizontal: false, vertical: false });
+
+    if (payload.url && payload.url !== existing?.url) {
+      browserViews.get(payload.projectId)!.url = payload.url;
+      if (payload.url !== "about:blank") {
+        view.webContents.loadURL(payload.url);
+      }
+    }
+
+    if (payload.devtools && !browserViews.get(payload.projectId)?.devtoolsOpen) {
+      view.webContents.openDevTools({ mode: "bottom" });
+      browserViews.get(payload.projectId)!.devtoolsOpen = true;
+    }
+  });
+
+  ipcMain.handle("browser:hide-view", async (_event, projectId: string) => {
+    if (!mainWindow) return;
+    const existing = browserViews.get(projectId);
+    if (existing) {
+      mainWindow.removeBrowserView(existing.view);
+      browserViews.delete(projectId);
+    }
+  });
+
+  ipcMain.handle("browser:command", async (_event, payload: { projectId: string; command: string }) => {
+    const existing = browserViews.get(payload.projectId);
+    if (!existing) return;
+
+    const view = existing.view;
+    switch (payload.command) {
+      case "back":
+        view.webContents.goBack();
+        break;
+      case "forward":
+        view.webContents.goForward();
+        break;
+      case "reload":
+        view.webContents.reload();
+        break;
+      case "devtools":
+        if (existing.devtoolsOpen) {
+          view.webContents.closeDevTools();
+          existing.devtoolsOpen = false;
+        } else {
+          view.webContents.openDevTools({ mode: "bottom" });
+          existing.devtoolsOpen = true;
+        }
+        break;
+    }
+  });
+
+  ipcMain.handle("browser:load-url", async (_event, payload: { projectId: string; url: string }) => {
+    const existing = browserViews.get(payload.projectId);
+    if (existing) {
+      existing.url = payload.url;
+      if (payload.url !== "about:blank") {
+        existing.view.webContents.loadURL(payload.url);
+      }
+    }
+  });
+
   ipcMain.handle("browser:open-external-url", async (_event, url: string) => openExternalUrl(url));
   ipcMain.handle(
     "remote:ensure-port-forward",
