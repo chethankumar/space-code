@@ -654,9 +654,61 @@ button {
   color: rgba(30, 41, 59, 0.78);
 }
 
-:root[data-theme="light"] .file-entry__chevron,
-:root[data-theme="light"] .file-entry__icon {
+:root[data-theme="light"] .file-entry__chevron {
   color: rgba(71, 85, 105, 0.66);
+}
+
+/* Light mode file icon colors - keep colored icons visible */
+:root[data-theme="light"] .file-entry__icon {
+  color: rgba(71, 85, 105, 0.5);
+}
+
+:root[data-theme="light"] .file-entry--directory .file-entry__icon {
+  color: rgba(180, 120, 30, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--code {
+  color: rgba(37, 99, 235, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--json {
+  color: rgba(34, 197, 94, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--text {
+  color: rgba(124, 58, 237, 0.82);
+}
+
+:root[data-theme="light"] .file-entry__icon--image {
+  color: rgba(236, 72, 153, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--shell {
+  color: rgba(22, 163, 74, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--config {
+  color: rgba(202, 138, 4, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--sheet {
+  color: rgba(20, 184, 166, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--archive {
+  color: rgba(234, 88, 12, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--package {
+  color: rgba(220, 38, 38, 0.85);
+}
+
+:root[data-theme="light"] .file-entry__icon--markup {
+  color: rgba(79, 70, 229, 0.88);
+}
+
+:root[data-theme="light"] .file-entry__icon--default {
+  color: rgba(71, 85, 105, 0.5);
 }
 
 :root[data-theme="light"] .browser-frame__overlay {
@@ -2775,6 +2827,11 @@ button {
   color: var(--color-text-subtle);
 }
 
+.editor-commit-file__icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .editor-commit-file__path {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2785,6 +2842,73 @@ button {
   display: grid;
   place-items: center;
   height: 100%;
+  color: var(--color-text-muted);
+}
+
+.editor-image-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding: 48px;
+  overflow: auto;
+  background: 
+    radial-gradient(circle at 50% 28%, rgba(59, 130, 246, 0.018), transparent 60%),
+    linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface) 100%);
+  gap: 20px;
+}
+
+:root[data-theme="light"] .editor-image-viewer {
+  background: 
+    radial-gradient(circle at 50% 28%, rgba(59, 130, 246, 0.025), transparent 60%),
+    linear-gradient(180deg, #fafbfc 0%, #f6f8fa 100%);
+}
+
+.editor-image {
+  max-width: 100%;
+  max-height: calc(100% - 60px);
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.06);
+  background: 
+    repeating-linear-gradient(
+      45deg,
+      rgba(255, 255, 255, 0.015),
+      rgba(255, 255, 255, 0.015) 10px,
+      rgba(0, 0, 0, 0.015) 10px,
+      rgba(0, 0, 0, 0.015) 20px
+    );
+}
+
+:root[data-theme="light"] .editor-image {
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.05),
+    0 8px 32px rgba(0, 0, 0, 0.04);
+  background: 
+    repeating-linear-gradient(
+      45deg,
+      rgba(0, 0, 0, 0.015),
+      rgba(0, 0, 0, 0.015) 10px,
+      rgba(255, 255, 255, 0.015) 10px,
+      rgba(255, 255, 255, 0.015) 20px
+    );
+}
+
+.editor-image-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-faint);
+  border-radius: 8px;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 
@@ -3932,7 +4056,7 @@ button {
 .code-message__changed-file {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
   font-size: 0.76rem;
   color: var(--color-text-muted);
@@ -3946,6 +4070,11 @@ button {
   min-width: 16px;
   color: var(--color-text-subtle);
   font: 0.72rem/1 "RecMono Nerd", "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+.code-message__changed-file-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .code-message__changed-file-status--added {

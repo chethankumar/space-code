@@ -320,6 +320,7 @@ export type CodeTab = {
   pendingRequest?: CodePendingRequest;
   tokenUsage?: CodeTokenUsage;
   lastError?: string;
+  currentTurnId?: string;
 };
 
 export type ProjectRecord = {

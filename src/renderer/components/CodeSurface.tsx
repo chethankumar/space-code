@@ -23,6 +23,7 @@ import type {
   CodeThemePreset,
   ProjectRecord
 } from "@shared/types";
+import { getFileVisual } from "@renderer/lib/fileVisuals";
 
 type CodeSurfaceProps = {
   project: ProjectRecord;
@@ -1025,7 +1026,16 @@ export function CodeSurface({
                           ) : message.title ? (
                             <>
                               <span className="code-command-block__label">{message.title}</span>
-                              {message.metadata?.output && (
+                              {message.metadata?.url && (
+                                <span className="code-command-block__text"> - {message.metadata.url}</span>
+                              )}
+                              {message.metadata?.query && (
+                                <span className="code-command-block__text"> - {message.metadata.query}</span>
+                              )}
+                              {message.metadata?.pattern && (
+                                <span className="code-command-block__text"> - {message.metadata.pattern}</span>
+                              )}
+                              {message.metadata?.output && !message.metadata.url && !message.metadata.query && !message.metadata.pattern && (
                                 <span className="code-command-block__text"> - {message.metadata.output}</span>
                               )}
                             </>
@@ -1076,26 +1086,31 @@ export function CodeSurface({
                       ) : null}
                       {item.message.changedFiles?.length ? (
                         <div className="code-message__changed-files">
-                          {item.message.changedFiles.map((file) => (
-                            <span key={`${item.message.id}-${file.path}`} className="code-message__changed-file">
-                              <span className={`code-message__changed-file-status code-message__changed-file-status--${file.status}`}>
-                                {file.status === "modified"
-                                  ? "M"
-                                  : file.status === "added"
-                                    ? "A"
-                                    : file.status === "deleted"
-                                      ? "D"
-                                      : file.status === "renamed"
-                                        ? "R"
-                                        : file.status === "copied"
-                                          ? "C"
-                                          : file.status === "untracked"
-                                            ? "U"
-                                            : "•"}
+                          {item.message.changedFiles.map((file) => {
+                            const fileVisual = getFileVisual(file.path);
+                            const FileIconComponent = fileVisual.icon;
+                            return (
+                              <span key={`${item.message.id}-${file.path}`} className="code-message__changed-file">
+                                <span className={`code-message__changed-file-status code-message__changed-file-status--${file.status}`}>
+                                  {file.status === "modified"
+                                    ? "M"
+                                    : file.status === "added"
+                                      ? "A"
+                                      : file.status === "deleted"
+                                        ? "D"
+                                        : file.status === "renamed"
+                                          ? "R"
+                                          : file.status === "copied"
+                                            ? "C"
+                                            : file.status === "untracked"
+                                              ? "U"
+                                              : "•"}
+                                </span>
+                                <FileIconComponent className={`code-message__changed-file-icon ${fileVisual.className}`} size={13} strokeWidth={1.9} />
+                                <span className="code-message__changed-file-path">{file.path}</span>
                               </span>
-                              <span className="code-message__changed-file-path">{file.path}</span>
-                            </span>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : null}
                     </div>

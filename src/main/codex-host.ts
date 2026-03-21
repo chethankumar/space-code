@@ -275,12 +275,23 @@ function createMessageFromItem(
     asString(item.text) ??
     fallbackText;
 
+  // Extract additional metadata for tool calls
+  const metadata: Record<string, string> = {};
+  const url = asString(item.url);
+  const query = asString(item.query);
+  const pattern = asString(item.pattern);
+  
+  if (url) metadata.url = url;
+  if (query) metadata.query = query;
+  if (pattern) metadata.pattern = pattern;
+
   return {
     id,
     kind: "tool",
     title: itemType.replace(/([a-z])([A-Z])/g, "$1 $2"),
     text: detail,
-    ...(createdAt ? { createdAt } : {})
+    ...(createdAt ? { createdAt } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {})
   };
 }
 

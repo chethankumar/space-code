@@ -248,21 +248,75 @@ export function EditorSurface({
                 <span>{activeTab.changedFiles.length} files</span>
               </div>
               <div className="editor-commit-browser__files">
-                {activeTab.changedFiles.map((file) => (
-                  <button
-                    key={`${activeTab.path}:${file.path}`}
-                    className="editor-commit-file"
-                    onClick={() => revealCommitFile(file.path)}
-                  >
-                    <span className="editor-commit-file__status">{file.status}</span>
-                    <span className="editor-commit-file__path">{file.path}</span>
-                  </button>
-                ))}
+                {activeTab.changedFiles.map((file) => {
+                  const fileVisual = getFileVisual(file.path);
+                  const FileIconComponent = fileVisual.icon;
+                  return (
+                    <button
+                      key={`${activeTab.path}:${file.path}`}
+                      className="editor-commit-file"
+                      onClick={() => revealCommitFile(file.path)}
+                    >
+                      <span className="editor-commit-file__status">{file.status}</span>
+                      <FileIconComponent className={`editor-commit-file__icon ${fileVisual.className}`} size={13} strokeWidth={1.9} />
+                      <span className="editor-commit-file__path">{file.path}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
           {activeTab ? (
-            activeTab.kind === "git-diff" || activeTab.kind === "git-history-diff" ? (
+            isImageFile(activeTab.path) && activeTab.kind === "file" ? (
+              (() => {
+                console.log('=== Image rendering for:', activeTab.path);
+                console.log('  Content length:', activeTab.content.length);
+                console.log('  Content preview:', activeTab.content.substring(0, 100));
+                
+                let imgSrc = '';
+                
+                if (activeTab.content.startsWith('__NAEDITOR_IMAGE__:')) {
+                  // Use custom protocol for local images
+                  const filePath = activeTab.content.substring('__NAEDITOR_IMAGE__:'.length);
+                  imgSrc = `naeditor-image://localhost${filePath}`;
+                  console.log('  Using custom protocol, imgSrc:', imgSrc);
+                } else if (activeTab.content.startsWith('data:')) {
+                  // Data URL (remote images or already encoded)
+                  imgSrc = activeTab.content;
+                  console.log('  Using data URL, length:', imgSrc.length);
+                } else if (activeTab.path.toLowerCase().endsWith('.svg')) {
+                  // SVG text content
+                  imgSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(activeTab.content)}`;
+                  console.log('  Using SVG inline');
+                } else {
+                  // Fallback - this shouldn't happen
+                  console.error('  UNEXPECTED: Image content format not recognized');
+                  console.error('  Content preview:', activeTab.content.substring(0, 200));
+                  imgSrc = activeTab.content;
+                }
+                
+                return (
+                  <div className="editor-image-viewer">
+                    <img 
+                      src={imgSrc}
+                      alt={activeTab.path.split("/").pop()}
+                      className="editor-image"
+                      onLoad={() => {
+                        console.log('✓ Image loaded successfully:', activeTab.path);
+                      }}
+                      onError={(e) => {
+                        console.error('✗ Failed to load image:', activeTab.path);
+                        console.error('  Content marker:', activeTab.content.substring(0, 50));
+                        console.error('  Image src:', imgSrc.substring(0, 100));
+                      }}
+                    />
+                    <div className="editor-image-info">
+                      <span>{activeTab.path.split("/").pop()}</span>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : activeTab.kind === "git-diff" || activeTab.kind === "git-history-diff" ? (
               <DiffEditor
                 key={activeTab.path}
                 height="100%"
@@ -589,6 +643,11 @@ function guessLanguage(path: string) {
     default:
       return "plaintext";
   }
+}
+
+function isImageFile(path: string): boolean {
+  const extension = path.toLowerCase().split(".").pop();
+  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "ico", "avif", "bmp"].includes(extension ?? "");
 }
 
 function getLanguageLabel(path?: string) {

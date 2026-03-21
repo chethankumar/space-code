@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, protocol } from "electron";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -108,6 +108,11 @@ codexHost.on("event", (event: CodeSessionEvent) => {
 });
 
 async function createWindow() {
+  // Determine icon path for dev vs production
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, "assets/logo.png")
+    : path.join(__dirname, "../../src/renderer/assets/logo.png");
+  
   mainWindow = new BrowserWindow({
     show: false,
     width: 1540,
@@ -116,11 +121,13 @@ async function createWindow() {
     minHeight: 760,
     titleBarStyle: "hiddenInset",
     backgroundColor: "#0d1117",
+    ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      webviewTag: true
+      webviewTag: true,
+      webSecurity: false
     }
   });
 
@@ -929,8 +936,46 @@ function sortFileTree(nodes: FileNode[]) {
 
 async function readProjectFile(project: ProjectRecord, targetPath: string) {
   const resolvedPath = resolveProjectTargetPath(project, targetPath);
+  
+  // Check if it's an image file
+  const isSvg = /\.svg$/i.test(targetPath);
+  const isImage = /\.(png|jpg|jpeg|gif|webp|ico|avif|bmp)$/i.test(targetPath);
+  
   if (project.kind === "local") {
+    // Read SVGs as text so they can be inlined
+    if (isSvg) {
+      const content = await fs.readFile(resolvedPath, "utf8");
+      console.log(`[readProjectFile] SVG ${targetPath}: length=${content.length}`);
+      return content;
+    }
+    
+    if (isImage) {
+      // Use custom protocol to avoid IPC size limits
+      console.log(`[readProjectFile] Image ${targetPath}: using custom protocol`);
+      return `__NAEDITOR_IMAGE__:${resolvedPath}`;
+    }
+    
     return fs.readFile(resolvedPath, "utf8");
+  }
+
+  if (isSvg) {
+    // Read SVG as text for remote projects
+    const result = await runRemoteCommand(project, `cat ${quoteProjectPath(project, resolvedPath)}`);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr || `Unable to read ${resolvedPath}`);
+    }
+    return result.stdout;
+  }
+
+  if (isImage) {
+    // For remote images, use base64 encoding (unavoidable for remote)
+    const result = await runRemoteCommand(project, `base64 ${quoteProjectPath(project, resolvedPath)}`);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr || `Unable to read ${resolvedPath}`);
+    }
+    const ext = targetPath.split('.').pop()?.toLowerCase() || 'png';
+    const mimeType = ext === 'jpg' ? 'jpeg' : ext;
+    return `data:image/${mimeType};base64,${result.stdout.trim()}`;
   }
 
   const result = await runRemoteCommand(project, `cat ${quoteProjectPath(project, resolvedPath)}`);
@@ -1764,6 +1809,43 @@ async function getAvailablePort() {
 }
 
 app.whenReady().then(() => {
+  // Register custom protocol for loading local images without size limits
+  const success = protocol.registerFileProtocol('naeditor-image', (request, callback) => {
+    try {
+      // URL format: naeditor-image://localhost/full/path/to/file.png
+      const url = request.url;
+      console.log('[naeditor-image protocol] Request URL:', url);
+      
+      // Extract path after the hostname
+      const match = url.match(/^naeditor-image:\/\/[^\/]+(\/.*)$/);
+      if (!match) {
+        console.error('[naeditor-image protocol] Invalid URL format:', url);
+        callback({ error: -2 });
+        return;
+      }
+      
+      const filePath = decodeURIComponent(match[1]);
+      console.log('[naeditor-image protocol] Loading file:', filePath);
+      callback({ path: filePath });
+    } catch (error) {
+      console.error('[naeditor-image protocol] Error:', error);
+      callback({ error: -2 }); // net::FAILED
+    }
+  });
+  
+  console.log('[naeditor] Protocol registered:', success);
+
+  // Set app icon for dock (macOS)
+  if (process.platform === 'darwin' && app.dock) {
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, "assets/logo.png")
+      : path.join(__dirname, "../../src/renderer/assets/logo.png");
+    
+    if (existsSync(iconPath)) {
+      app.dock.setIcon(iconPath);
+    }
+  }
+  
   installAppMenu();
   createWindow();
 

@@ -1715,7 +1715,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!context?.tab.threadId) {
       return;
     }
-    await window.naeditor.interruptCodeTurn(tabId);
+    await window.naeditor.interruptCodeTurn(tabId, context.tab.currentTurnId);
   },
   respondToCodeRequest: async (tabId, decision, answers) => {
     const context = getCodeContext(get(), tabId);
@@ -1775,7 +1775,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
             return {
               ...tab,
               status: "running",
-              pendingRequest: undefined
+              pendingRequest: undefined,
+              currentTurnId: event.turnId
             };
           case "turn.completed":
             {
@@ -1799,6 +1800,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 ...tab,
                 status: event.status === "completed" ? "ready" : "error",
                 messages: nextMessages,
+                currentTurnId: undefined,
                 ...(event.error ? { lastError: event.error } : {})
               };
             }
