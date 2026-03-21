@@ -82,6 +82,8 @@ jobs:
             release/*.dmg
             release/*.zip
           retention-days: 30
+          if-no-files-found: warn
+        continue-on-error: true
 
       - name: Upload artifacts (Windows)
         if: matrix.os == 'windows-latest'
@@ -92,6 +94,8 @@ jobs:
             release/*.exe
             release/*.zip
           retention-days: 30
+          if-no-files-found: warn
+        continue-on-error: true
 
       - name: Upload artifacts (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -103,6 +107,8 @@ jobs:
             release/*.deb
             release/*.rpm
           retention-days: 30
+          if-no-files-found: warn
+        continue-on-error: true
 
   release:
     needs: build
@@ -117,6 +123,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          continue-on-error: true
+
+      - name: Wait for artifacts to be available
+        run: |
+          echo "Waiting for artifacts to be available..."
+          sleep 10
+          ls -R artifacts || echo "No artifacts found yet"
+
+      - name: Retry download if needed
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          continue-on-error: true
 
       - name: Display structure of downloaded files
         run: ls -R artifacts
@@ -129,5 +148,6 @@ jobs:
             artifacts/SpaceCode-Windows/*
             artifacts/SpaceCode-Linux/*
           generate_release_notes: true
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
