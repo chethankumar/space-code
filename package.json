@@ -1,9 +1,13 @@
 {
   "name": "spacecode",
   "version": "0.1.0",
-  "private": true,
-  "description": "SpaceCode - a single-window multi-project editor for macOS",
+  "description": "SpaceCode - a single-window multi-project editor",
   "main": "dist-electron/main/index.js",
+  "author": {
+    "name": "SpaceCode",
+    "email": "hello@spacecode.dev"
+  },
+  "homepage": "https://spacecode.dev",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on tcp:5173 file:dist-electron/main/index.js file:dist-electron/main/preload.js file:dist-electron/main/terminal-host.js && nodemon --watch dist-electron --ext js --exec 'cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron dist-electron/main/index.js'\"",
     "build": "npm run build:renderer && npm run build:electron",
@@ -11,7 +15,12 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "preview": "vite preview",
     "postinstall": "electron-rebuild -f -w node-pty && npm run codesign:node-pty",
-    "codesign:node-pty": "sh -c 'for file in node_modules/node-pty/build/Release/pty.node node_modules/node-pty/build/Release/spawn-helper; do if [ -f \"$file\" ]; then codesign --force --sign - \"$file\"; fi; done'"
+    "codesign:node-pty": "sh -c 'for file in node_modules/node-pty/build/Release/pty.node node_modules/node-pty/build/Release/spawn-helper; do if [ -f \"$file\" ]; then codesign --force --sign - \"$file\"; fi; done'",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:all": "npm run build && electron-builder -mwl"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.1.1",
@@ -36,9 +45,75 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^35.0.0",
+    "electron-builder": "^26.8.1",
     "nodemon": "^3.1.10",
     "typescript": "^5.7.3",
     "vite": "^6.2.0",
     "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "dev.spacecode.app",
+    "productName": "SpaceCode",
+    "copyright": "Copyright © 2025 SpaceCode",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "!node_modules/*/{CHANGELOG.md,README.md,readme.md,LICENSE,license}",
+      "!node_modules/.cache"
+    ],
+    "extraResources": [
+      {
+        "from": "src/renderer/assets/logo.png",
+        "to": "assets/logo.png"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "src/renderer/assets/logo.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "icon": "src/renderer/assets/logo.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "src/renderer/assets/logo.png",
+      "category": "Development",
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "maintainer": "hello@spacecode.dev"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "src/renderer/assets/logo.png"
+    }
   }
 }
