@@ -57,7 +57,7 @@ type InspectorProps = {
   getGitCommitDetails: (commitHash: string) => Promise<GitCommitDetails | null>;
   onOpenGitCompare: (baseRef: string, targetRef: string) => void;
   onOpenSearchResult: (match: SearchMatch, query?: string) => void;
-  ensureDirectory: (rootPath: string) => Promise<void>;
+  ensureDirectory: (rootPath: string, forceRefresh?: boolean) => Promise<void>;
   onSearchProject: (projectId: string, query: string, options?: SearchQueryOptions) => Promise<SearchMatch[]>;
   onInitGit: (projectId: string) => Promise<ShellCommandResult | null>;
   listGitRepositories: (projectId: string) => Promise<NonNullable<ProjectWorkspace["gitRepositories"]>>;
@@ -246,7 +246,7 @@ export function Inspector({
     }
 
     const handleFileChange = () => {
-      void ensureDirectory(project.rootPath!);
+      void ensureDirectory(project.rootPath!, true);
     };
 
     const unsubscribe = window.naeditor.onFileChange((payload) => {
